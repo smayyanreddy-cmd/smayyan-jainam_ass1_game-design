@@ -174,6 +174,8 @@ The recorder checks every 1 Hz GPS fix. Flagged distance earns **no damage, no d
 | **GPS jump** | > 80 m between consecutive 1-second fixes (≈ 290 km/h) | Teleport across town: the segment is ignored |
 | **Mode mismatch** | Mode is *walking* and the 5-second smoothed speed is > 10 km/h | "Walking" at 25 km/h |
 | **Car-speed segment** | Smoothed speed is > 45 km/h in any mode | Riding in a car or bus |
+| **Poor GPS fix** (live GPS) | Fixes with accuracy worse than ±35 m are dropped before scoring | Indoors, or between tall buildings |
+| **Altitude glitch** | A measured grade steeper than 25 % is treated as flat | GPS altitude jumping, so there's no fake uphill bonus |
 
 * Damage stops on the **first** over-limit sample. A visible flag ("Anti-cheat: …") appears once the speed has been over the limit for **8 s**, so a GPS spike doesn't trigger a warning.
 * The summary lists every flag and the kilometres excluded.

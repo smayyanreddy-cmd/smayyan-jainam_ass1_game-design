@@ -114,6 +114,77 @@
     return [a[0] + (b[0] - a[0]) * m / d, a[1] + (b[1] - a[1]) * m / d];
   }
 
+  // ---------------------------------------------------------------- live GPS
+
+  /**
+   * Real GPS via navigator.geolocation. Fixes arrive at irregular intervals,
+   * so they are resampled to the 1 Hz stream the recorder expects
+   * (linear interpolation across gaps of up to 30 s).
+   * @param {object} h { onSample(smp), onFix(fix), onError(msg) }
+   */
+  // Human-readable geolocation errors with the fix, shared by live GPS and one-off lookups.
+  const GEO_HELP = {
+    1: 'Location is blocked. Click the icon left of the address bar → Location → Allow, then reload. On Windows also check Settings → Privacy & security → Location.',
+    2: 'Your device couldn’t find a position. Turn on location services (Windows: Settings → Privacy & security → Location) or move to open sky.',
+    3: 'Finding your location timed out. Try again.',
+  };
+
+  function createLiveSource(h) {
+    const MAX_ACCURACY_M = 35, MAX_GAP_S = 30;
+    let watchId = null, last = null, t = 0, paused = false;
+
+    function onPos(p) {
+      const c = p.coords;
+      const [x, y] = Geo.toXY(c.latitude, c.longitude);
+      const fix = { x, y, acc: c.accuracy, alt: c.altitude, ts: p.timestamp };
+      h.onFix && h.onFix(fix);
+      if (paused || c.accuracy > MAX_ACCURACY_M) return; // too fuzzy to score
+      if (!last) { last = fix; emit(fix); return; }
+      const gap = Math.round((fix.ts - last.ts) / 1000);
+      if (gap < 1) return; // wait for at least a second of movement
+      if (gap > MAX_GAP_S) { emit(fix); last = fix; return; } // signal lost: no interpolation
+      for (let k = 1; k <= gap; k++) {
+        const f = k / gap;
+        emit({
+          x: last.x + (fix.x - last.x) * f,
+          y: last.y + (fix.y - last.y) * f,
+          alt: last.alt != null && fix.alt != null ? last.alt + (fix.alt - last.alt) * f : null,
+        });
+      }
+      last = fix;
+    }
+    let lastAlt = 0;
+    function emit(f) {
+      t++;
+      // Missing GPS altitude: hold the last known value (no fake uphill bonus).
+      if (f.alt != null) lastAlt = f.alt;
+      h.onSample({ t, x: f.x, y: f.y, alt: lastAlt, hr: 0 });
+    }
+    function onErr(e) {
+      const msg = e.code === 3 ? 'GPS timed out. Still searching…' : GEO_HELP[e.code] || e.message;
+      h.onError && h.onError(msg, e.code);
+    }
+    return {
+      start() {
+        if (!('geolocation' in navigator)) { h.onError && h.onError('This browser has no GPS support.', 0); return; }
+        watchId = navigator.geolocation.watchPosition(onPos, onErr, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+      },
+      pause(v) { paused = v; if (!v) last = null; }, // resume restarts interpolation (no line across the pause)
+      stop() { if (watchId != null) navigator.geolocation.clearWatch(watchId); watchId = null; },
+    };
+  }
+
+  /** One-off position, resolves {lat, lng, acc}. */
+  function locateOnce() {
+    return new Promise((resolve, reject) => {
+      if (!('geolocation' in navigator)) return reject(new Error('This browser has no GPS support.'));
+      navigator.geolocation.getCurrentPosition(
+        (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy }),
+        (e) => reject(new Error(GEO_HELP[e.code] || 'Could not get your location.')),
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+    });
+  }
+
   // ---------------------------------------------------------------- recorder
 
   /**
@@ -171,6 +242,7 @@
       altWin.push({ alt: smp.alt, d }); if (altWin.length > 10) altWin.shift();
       const run = altWin.slice(1).reduce((a, w) => a + w.d, 0);
       rec.grade = run > 15 ? (altWin[altWin.length - 1].alt - altWin[0].alt) / run : 0;
+      if (Math.abs(rec.grade) > 0.25) rec.grade = 0; // GPS altitude glitch, not a real 25 % hill
 
       rec.hr = smp.hr; rec.hrZone = R.hrZone(smp.hr);
 
@@ -282,5 +354,5 @@
     return rec;
   }
 
-  window.Sim = { SCENARIOS, customScenario, createSampler, createRecorder };
+  window.Sim = { SCENARIOS, customScenario, createSampler, createRecorder, createLiveSource, locateOnce };
 })();

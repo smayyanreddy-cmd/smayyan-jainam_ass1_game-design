@@ -8,7 +8,12 @@
   const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const reducedMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  let S = W.load();
+  const LAST_ACCOUNT = 'pedalpace.lastAccount';
+  const lastAccount = () => { try { return localStorage.getItem(LAST_ACCOUNT) || null; } catch (e) { return null; } };
+  const setLastAccount = (id) => { try { id ? localStorage.setItem(LAST_ACCOUNT, id) : localStorage.removeItem(LAST_ACCOUNT); } catch (e) { /* ignore */ } };
+  let S = W.load(lastAccount());
+  Geo.setOrigin(S.origin || Geo.DEMO_ORIGIN);
+  const realBoard = () => !!(S.origin && S.origin.real);
   const ui = { tab: 'map', scenario: 'claim', mode: 'auto', group: 1, speed: S.settings.playback || 20, hr: S.player.hr };
 
   // ================================================================ map
@@ -38,6 +43,7 @@
   const labelLayer = L.layerGroup().addTo(map);
   const trackLayer = L.layerGroup().addTo(map);
   const fxLayer = L.layerGroup().addTo(map);
+  const hereLayer = L.layerGroup().addTo(map);
   const zoneViews = {};
 
   const theme = () => (S.settings.sunlight ? 'sun' : 'neon');
@@ -220,7 +226,17 @@
   // ================================================================ start sheet
 
   function renderStartSheet() {
-    const list = Sim.SCENARIOS.map((sc) => `
+    const liveNote = !window.isSecureContext ? 'Needs https:// or localhost: browsers block GPS on plain http.'
+      : realBoard() ? 'Record a real walk or ride with your phone’s GPS. Keep the app open and the screen on.'
+      : 'Uses your real location. Your game board moves to where you are.';
+    const live = `
+      <button class="scenario live ${ui.scenario === 'live' ? 'on' : ''}" data-sc="live" aria-pressed="${ui.scenario === 'live'}">
+        <span class="sc-ico" aria-hidden="true">📍</span>
+        <span class="sc-txt"><b>Live GPS: go outside</b><small>${liveNote}</small></span>
+        <span class="tag">real</span>
+      </button>
+      <p class="small muted sc-divider">Or test with a simulated route:</p>`;
+    const list = live + Sim.SCENARIOS.map((sc) => `
       <button class="scenario ${ui.scenario === sc.id ? 'on' : ''}" data-sc="${sc.id}" aria-pressed="${ui.scenario === sc.id}">
         <span class="sc-ico" aria-hidden="true">${sc.icon}</span>
         <span class="sc-txt"><b>${esc(sc.name)}</b><small>${esc(sc.desc)}</small></span>
@@ -233,6 +249,11 @@
     if (sc && sc.declared) ui.mode = sc.declared;
     setSeg('#opt-mode', ui.mode); setSeg('#opt-group', String(ui.group)); setSeg('#opt-speed', String(ui.speed));
     $('#opt-hr').checked = ui.hr;
+    const isLive = ui.scenario === 'live';
+    $('#opt-speed').closest('.opt-row').hidden = isLive;
+    $('#opt-hr').closest('.switch-row').hidden = isLive;
+    $('#opt-group').closest('.opt-row').hidden = isLive; // combo needs server-verified co-location
+    $('#btn-go').textContent = isLive ? 'Start recording' : 'Start';
     $('#mode-hint').textContent = ui.mode === 'auto'
       ? 'Auto detects walking vs cycling from your speed. Override it if it gets it wrong.'
       : `Locked to ${ui.mode === 'walk' ? 'walking' : 'cycling'}. Speeds that don’t match will be flagged.`;
@@ -272,18 +293,45 @@
 
   let run = null;
 
+  /** Move the game board so home sits at the player's real position. */
+  async function setHomeHere() {
+    const p = await Sim.locateOnce();
+    S.origin = { lat: p.lat, lng: p.lng, real: true };
+    Geo.setOrigin(S.origin);
+    W.save(S);
+    renderTerritory();
+    map.setView(Geo.toLL(250, 150), 15);
+    return p;
+  }
+
+  function showHere(p) {
+    hereLayer.clearLayers();
+    L.circle([p.lat, p.lng], { radius: p.acc, color: '#4C8DFF', weight: 1, fillOpacity: 0.12, interactive: false }).addTo(hereLayer);
+    L.circleMarker([p.lat, p.lng], { radius: 8, color: '#fff', weight: 3, fillColor: '#4C8DFF', fillOpacity: 1, interactive: false }).addTo(hereLayer);
+  }
+
+  async function startLive() {
+    if (!window.isSecureContext) { toast('📍 GPS needs https:// or localhost.', 'attack'); return; }
+    if (!realBoard()) {
+      if (!confirm('Live GPS plays on the real map around you. Move your game board (and its zones) to your current location?')) return;
+      try { closeSheets(); toast('📡 Finding you…'); await setHomeHere(); } catch (e) { toast('📍 ' + e.message, 'attack'); return; }
+    }
+    startActivity({ id: 'live', name: 'Live GPS ' + (ui.mode === 'cycle' ? 'ride' : ui.mode === 'walk' ? 'walk' : 'activity'), icon: '📍', mode: ui.mode === 'cycle' ? 'cycle' : 'walk', live: true, start: [0, 0] });
+  }
+
   function startActivity(sc) {
     closeSheets();
     S.settings.playback = ui.speed; S.player.hr = ui.hr;
     const declared = sc.declared || ui.mode;
     const group = sc.group && ui.group === 1 ? sc.group : ui.group;
-    const sampler = Sim.createSampler(sc, { hr: ui.hr });
+    const live = !!sc.live;
+    const sampler = live ? null : Sim.createSampler(sc, { hr: ui.hr });
     trackLayer.clearLayers(); fxLayer.clearLayers();
     run = {
       sc, sampler, declared, group, paused: false, carry: 0, acc: 0, accHit: 0, lastCtx: 'neutral',
       line: null, lineValid: null, glow: null, popups: 0, minimumToastShown: S.stats.todayMet,
     };
-    run.rec = Sim.createRecorder(S, { declared, group, hr: ui.hr }, onEvent);
+    run.rec = Sim.createRecorder(S, { declared, group, hr: live ? false : ui.hr }, onEvent);
     run.me = L.marker(Geo.toLL(...sc.start), { icon: L.divIcon({ className: 'me-wrap', html: '<div class="me-dot"><span></span></div>', iconSize: [34, 34], iconAnchor: [17, 17] }), interactive: false, zIndexOffset: 1000 }).addTo(fxLayer);
     if (group > 1) {
       run.mates = [];
@@ -295,10 +343,40 @@
     setChrome('rec');
     $('#rec-flag').hidden = true;
     $('#r-speedbtn').textContent = '×' + ui.speed;
+    $('#r-speedbtn').hidden = live;
     $('#r-pause').textContent = '❚❚'; $('#r-pause').setAttribute('aria-label', 'Pause');
     renderHud();
-    banner('GO! ' + (sc.mode === 'walk' ? '🚶' : '🚴'), 'go');
-    run.timer = setInterval(tick, 100);
+    if (!live) {
+      banner('GO! ' + (sc.mode === 'walk' ? '🚶' : '🚴'), 'go');
+      run.timer = setInterval(tick, 100);
+      return;
+    }
+    banner('Waiting for GPS… 📡', 'claim');
+    run.live = Sim.createLiveSource({
+      onFix(f) {
+        if (!run) return;
+        run.gpsAcc = f.acc;
+        if (!run.gotFix) { run.gotFix = true; map.setView(Geo.toLL(f.x, f.y), 17, { animate: false }); run.me.setLatLng(Geo.toLL(f.x, f.y)); banner('GO! ' + (sc.mode === 'walk' ? '🚶' : '🚴'), 'go'); }
+        renderHud();
+      },
+      onSample(smp) {
+        if (!run || run.paused) return;
+        run.rec.push(smp); drawTrack(smp); follow(smp); renderHud();
+      },
+      onError(msg, code) {
+        toast('📍 ' + msg, 'attack');
+        if (code === 1 || code === 0) finishActivity();
+      },
+    });
+    run.live.start();
+    if (navigator.wakeLock) navigator.wakeLock.request('screen').then((w) => { if (run) run.wake = w; else w.release(); }).catch(() => {});
+  }
+
+  function follow(p) {
+    const ll = Geo.toLL(p.x, p.y);
+    run.me.setLatLng(ll);
+    if (run.mates) run.mates.forEach((m, k) => m.setLatLng(Geo.toLL(p.x - 9 * (k + 1), p.y - 7 * (k + 1))));
+    map.panTo(ll, { animate: false });
   }
 
   function tick() {
@@ -313,10 +391,7 @@
       drawTrack(smp);
     }
     if (!last) return;
-    const ll = Geo.toLL(last.x, last.y);
-    run.me.setLatLng(ll);
-    if (run.mates) run.mates.forEach((m, k) => m.setLatLng(Geo.toLL(last.x - 9 * (k + 1), last.y - 7 * (k + 1))));
-    map.panTo(ll, { animate: false });
+    follow(last);
     renderHud();
   }
 
@@ -432,6 +507,7 @@
       ? (r.intensity >= R.WALK.UPHILL ? 'uphill' : r.intensity >= R.WALK.BRISK ? 'brisk' : 'base')
       : (r.intensity > R.CYCLE.BASE ? 'effort bonus' : 'base');
     chips.push(`<span class="c c-int">×${r.intensity.toFixed(2)} ${why}</span>`);
+    if (run.live) chips.push(run.gotFix ? `<span class="c ${run.gpsAcc > 35 ? 'c-weak' : ''}">📡 GPS ±${Math.round(run.gpsAcc)} m${run.gpsAcc > 35 ? ' · weak' : ''}</span>` : '<span class="c c-weak">📡 Searching…</span>');
     if (ui.hr && r.hr) chips.push(`<span class="c">♥ ${r.hr} · Z${r.hrZone}</span>`);
     if (st.streak) chips.push(`<span class="c">🔥 ×${R.streakMult(st.streak).toFixed(2)}</span>`);
     if (run.group > 1) chips.push(`<span class="c c-combo">COMBO ×${R.groupMult(run.group)}</span>`);
@@ -446,6 +522,13 @@
   function finishActivity() {
     if (!run) return;
     clearInterval(run.timer);
+    if (run.live) run.live.stop();
+    if (run.wake) run.wake.release().catch(() => {});
+    if (run.rec.samples.length < 2) {
+      run = null; trackLayer.clearLayers(); fxLayer.clearLayers();
+      setChrome('nav'); toast('Nothing recorded.');
+      return;
+    }
     const r = run.rec, st = S.stats, sc = run.sc;
     const pts = r.totalPoints();
     st.totalPoints += pts;
@@ -490,6 +573,7 @@
 
   function renderSummary(x) {
     setChrome('none');
+    $('#toasts').innerHTML = '';
     const el = $('#screen-summary');
     const mins = Math.floor(x.sec / 60), secs = x.sec % 60;
     const avg = x.sec ? x.km / (x.sec / 3600) : 0;
@@ -640,8 +724,9 @@
     const myCells = W.ownedCells(S, 'you');
     const nextPen = R.inactivityPenalty(st.missedDays + 1);
     el.innerHTML = `<div class="screen-inner">
-      <div class="prof-head"><span class="av big" style="--c:${myColor()}">${esc(S.player.name[0])}</span>
+      <div class="prof-head">${S.account && S.account.picture ? `<img class="av big" src="${esc(S.account.picture)}" alt="" referrerpolicy="no-referrer">` : `<span class="av big" style="--c:${myColor()}">${esc(S.player.name[0])}</span>`}
         <div><h1 id="prof-title">${esc(S.player.name)}</h1><p class="muted">${S.player.clan ? esc(W.CLANS[S.player.clan].name) : 'Solo'} · Day ${S.day}</p></div></div>
+      ${accountCard()}
       <div class="tiles">
         <div class="tile"><span class="lbl">Total points</span><b class="num">${fmt(st.totalPoints)}</b></div>
         <div class="tile"><span class="lbl">Damage dealt</span><b class="num">${fmt(st.damageDealt)}</b></div>
@@ -674,6 +759,8 @@
         <label class="switch-row"><span>Heart-rate monitor</span><input type="checkbox" id="set-hr" ${S.player.hr ? 'checked' : ''}/><i aria-hidden="true"></i></label>
         <label class="switch-row"><span>Notifications</span><input type="checkbox" id="set-notif" ${S.player.notifications ? 'checked' : ''}/><i aria-hidden="true"></i></label>
         <div class="opt-row"><span class="opt-label">Colour</span><div class="swatches">${W.PLAYER_COLORS.map((c) => `<button class="sw ${S.player.color === c ? 'on' : ''}" data-col="${c}" style="--c:${W.COLORS[c][theme()]}" aria-label="${W.COLORS[c].name}" aria-pressed="${S.player.color === c}"></button>`).join('')}</div></div>
+        <div class="opt-row"><span class="opt-label">📍 Board location</span><span class="small muted">${realBoard() ? 'Around your location' : 'Demo city (Chicago)'}</span></div>
+        <div class="row gap wrap"><button class="btn" id="set-here">Move board to my location</button>${realBoard() ? '<button class="btn" id="set-demo">Use demo city</button>' : ''}</div>
         <button class="btn btn-block" id="set-reset">Reset prototype</button>
       </div>
     </div>`;
@@ -682,7 +769,51 @@
     $('#set-hr').onchange = (e) => { S.player.hr = ui.hr = e.target.checked; W.save(S); };
     $('#set-notif').onchange = (e) => { S.player.notifications = e.target.checked; W.save(S); };
     $$('#screen-profile [data-col]').forEach((b) => (b.onclick = () => { S.player.color = S.players.you.color = b.dataset.col; W.save(S); applyTheme(); renderProfile(); }));
-    $('#set-reset').onclick = () => { if (confirm('Reset all progress and replay onboarding?')) { S = W.reset(); boot(); } };
+    $('#set-reset').onclick = () => {
+      if (!confirm('Reset all progress and replay onboarding?')) return;
+      const acct = S.account;
+      S = W.reset(acct && acct.sub); S.account = acct; boot();
+    };
+    $('#set-here').onclick = async (e) => {
+      e.target.disabled = true; e.target.textContent = 'Finding you…';
+      try { await setHomeHere(); toast('📍 Board moved to your location.', 'good'); } catch (err) { toast('📍 ' + err.message, 'attack'); }
+      renderProfile();
+    };
+    if ($('#set-demo')) $('#set-demo').onclick = () => { S.origin = null; Geo.setOrigin(Geo.DEMO_ORIGIN); hereLayer.clearLayers(); W.save(S); renderTerritory(); map.setView(Geo.toLL(250, 150), 15); renderProfile(); };
+    if ($('#acct-out')) $('#acct-out').onclick = signOut;
+    Auth.renderButton($('#gsi-profile'), theme() === 'neon');
+  }
+
+  function accountCard() {
+    if (S.account) {
+      return `<div class="note account">${S.account.picture ? `<img class="acct-pic" src="${esc(S.account.picture)}" alt="" referrerpolicy="no-referrer">` : ''}
+        <div class="acct-txt"><b>${esc(S.account.name)}</b><small>${esc(S.account.email || '')} · Google</small></div>
+        <button class="btn" id="acct-out">Sign out</button></div>`;
+    }
+    return `<div class="note account col"><div class="acct-txt"><b>Playing as guest</b><small>Sign in with Google to keep your territory under your account on this device.</small></div>
+      <div id="gsi-profile" class="gsi-slot"></div></div>`;
+  }
+
+  // ================================================================ Google sign-in
+
+  function onSignIn(acct) {
+    const saved = W.loadSaved(acct.sub);
+    if (saved) S = saved; // returning player: load their save
+    else if (!S.player.name || S.player.name === 'You') S.player.name = S.players.you.name = (acct.givenName || acct.name || 'You').slice(0, 14);
+    S.account = { sub: acct.sub, name: acct.name, email: acct.email, picture: acct.picture };
+    setLastAccount(acct.sub);
+    W.save(S);
+    toast(`👋 Signed in as ${acct.name}`, 'good');
+    if (!S.onboarded) { Geo.setOrigin(S.origin || Geo.DEMO_ORIGIN); applyTheme(); renderOnboarding(3); }
+    else boot();
+  }
+
+  function signOut() {
+    Auth.signOut();
+    setLastAccount(null);
+    S = W.load(null);
+    toast('Signed out. Playing as guest.');
+    boot();
   }
 
   function endDay(useToken) {
@@ -717,13 +848,18 @@
        <p>Days without activity cost points, starting small and <b>capped at −50/day</b>. Inactive players' zones decay.</p>
        <ul class="ticks"><li>✅ Daily minimum: <b>15 min walking</b> or <b>5 km cycling</b></li><li>😴 <b>1 rest token per week</b>: recovery days are never punished</li><li>🔥 Streaks add up to +20% damage</li></ul>`,
       `<h1>Make your player</h1>
+       <div class="field"><span>Account</span>${S.account
+         ? `<div class="acct-row">${S.account.picture ? `<img class="acct-pic" src="${esc(S.account.picture)}" alt="" referrerpolicy="no-referrer">` : ''}<div class="acct-txt"><b>${esc(S.account.name)}</b><small>${esc(S.account.email || '')}</small></div></div>`
+         : '<div id="gsi-ob" class="gsi-slot"></div><small class="muted">Or continue as a guest. Progress stays on this device.</small>'}</div>
        <label class="field"><span>Name</span><input id="ob-name" maxlength="14" value="${esc(S.player.name === 'You' ? '' : S.player.name)}" placeholder="e.g. Sam" autocomplete="nickname"/></label>
        <div class="field"><span>Territory colour</span><div class="swatches">${W.PLAYER_COLORS.map((c) => `<button class="sw ${S.player.color === c ? 'on' : ''}" data-col="${c}" style="--c:${W.COLORS[c].neon}" aria-label="${W.COLORS[c].name}" aria-pressed="${S.player.color === c}"></button>`).join('')}</div></div>
        <div class="field"><span>Clan</span><div class="seg" id="ob-clan" role="radiogroup">
          <button role="radio" data-v="neon" aria-checked="${S.player.clan === 'neon'}">👥 Join Neon Spokes</button><button role="radio" data-v="" aria-checked="${!S.player.clan}">Go solo</button></div></div>
        <label class="switch-row"><span>Heart-rate monitor (simulated)</span><input type="checkbox" id="ob-hr" ${S.player.hr ? 'checked' : ''}/><i aria-hidden="true"></i></label>
        <label class="switch-row"><span>Notifications (attacks, decay, streaks)</span><input type="checkbox" id="ob-notif" ${S.player.notifications ? 'checked' : ''}/><i aria-hidden="true"></i></label>
-       <p class="small muted">📍 Location: this prototype uses <b>simulated GPS</b>, so no permission is needed.</p>`,
+       <div class="field"><span>Where do you play?</span><div class="seg" id="ob-loc" role="radiogroup">
+         <button role="radio" data-v="here" aria-checked="${realBoard()}">📍 Around me</button><button role="radio" data-v="demo" aria-checked="${!realBoard()}">Demo city</button></div>
+         <small class="muted" id="ob-loc-note">${realBoard() ? '✓ Board placed around your location. Rival zones are nearby.' : 'Demo city works anywhere and has scripted test routes.'}</small></div>`,
     ];
     el.innerHTML = `<div class="screen-inner ob">
       ${steps[step]}
@@ -744,6 +880,13 @@
     };
     if (step === 3) {
       $$('#screen-onboarding [data-col]').forEach((b) => (b.onclick = () => { save(); S.player.color = S.players.you.color = b.dataset.col; renderOnboarding(3); }));
+      $$('#ob-loc button').forEach((b) => (b.onclick = async () => {
+        save();
+        if (b.dataset.v === 'demo') { S.origin = null; Geo.setOrigin(Geo.DEMO_ORIGIN); renderOnboarding(3); return; }
+        $('#ob-loc-note').textContent = '📡 Finding you… (allow location access)';
+        try { await setHomeHere(); renderOnboarding(3); } catch (e) { $('#ob-loc-note').textContent = '⚠ ' + e.message + ' (Using the demo city for now.)'; }
+      }));
+      if (!S.account) Auth.renderButton($('#gsi-ob'), theme() === 'neon');
       $$('#ob-clan button').forEach((b) => (b.onclick = () => { save(); S.player.clan = S.players.you.clan = b.dataset.v || null; renderOnboarding(3); }));
     }
     $('#ob-next').onclick = () => { save(); if (step < steps.length - 1) renderOnboarding(step + 1); else finishOnboarding(); };
@@ -769,7 +912,11 @@
     $('#btn-bell').onclick = openNotifs;
     $('#btn-sun').onclick = () => { S.settings.sunlight = !S.settings.sunlight; W.save(S); applyTheme(); if (ui.tab !== 'map') showTab(ui.tab); };
     $('#tb-daily').onclick = () => { const st = S.stats; toast(st.todayMet ? 'Daily minimum met ✓ No penalty tonight.' : `Daily minimum: ${st.todayWalkMin.toFixed(0)}/15 min walking or ${st.todayCycleKm.toFixed(1)}/5 km cycling. Skipping costs −${R.inactivityPenalty(st.missedDays + 1)}.`); };
-    $('#btn-locate').onclick = () => map.setView(Geo.toLL(250, 150), 15);
+    $('#btn-locate').onclick = async () => {
+      if (!realBoard()) { map.setView(Geo.toLL(250, 150), 15); return; }
+      try { const p = await Sim.locateOnce(); showHere(p); map.setView([p.lat, p.lng], 16); }
+      catch (e) { toast('📍 ' + e.message); map.setView(Geo.toLL(250, 150), 15); }
+    };
     $('#btn-legend').onclick = () => { const l = $('#legend'); l.hidden = !l.hidden; $('#btn-legend').setAttribute('aria-expanded', String(!l.hidden)); };
     $$('[data-close]').forEach((b) => (b.onclick = closeSheets));
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheets(); });
@@ -777,6 +924,7 @@
     $('#scenario-list').addEventListener('click', (e) => {
       const b = e.target.closest('[data-sc]'); if (!b) return;
       if (b.dataset.sc === 'draw') { startDraw(); return; }
+      if (b.dataset.sc === 'live') { ui.scenario = 'live'; ui.group = 1; renderStartSheet(); return; }
       const prev = Sim.SCENARIOS.find((x) => x.id === ui.scenario);
       if (prev && prev.declared) ui.mode = 'auto';
       ui.scenario = b.dataset.sc;
@@ -790,6 +938,7 @@
     seg('#opt-speed', (v) => (ui.speed = +v));
     $('#opt-hr').onchange = (e) => (ui.hr = e.target.checked);
     $('#btn-go').onclick = () => {
+      if (ui.scenario === 'live') { startLive(); return; }
       const sc = Sim.SCENARIOS.find((x) => x.id === ui.scenario);
       if (sc.declared && ui.mode !== sc.declared) ui.mode = sc.declared;
       startActivity(sc);
@@ -807,6 +956,7 @@
     $('#r-pause').onclick = () => {
       if (!run) return;
       run.paused = !run.paused;
+      if (run.live) run.live.pause(run.paused);
       $('#r-pause').textContent = run.paused ? '▶' : '❚❚';
       $('#r-pause').setAttribute('aria-label', run.paused ? 'Resume' : 'Pause');
     };
@@ -818,12 +968,15 @@
   }
 
   function boot() {
+    Geo.setOrigin(S.origin || Geo.DEMO_ORIGIN);
+    hereLayer.clearLayers(); trackLayer.clearLayers(); fxLayer.clearLayers();
     ui.hr = S.player.hr; ui.speed = S.settings.playback || 20;
     applyTheme(); renderTopbar();
     if (!S.onboarded) { setChrome('none'); renderOnboarding(0); }
     else { $('#screen-onboarding').hidden = true; showTab('map'); }
   }
 
+  Auth.init(onSignIn);
   wire();
   boot();
   // Expose for debugging / automated checks.

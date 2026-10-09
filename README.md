@@ -13,15 +13,30 @@ A mobile-first fitness game that turns real walks and rides into a territory-and
 |---|---|
 | Game rules with exact scoring formulas | [docs/GAME_RULES.md](docs/GAME_RULES.md) |
 | Screen list & user flow | [docs/SCREENS_AND_FLOW.md](docs/SCREENS_AND_FLOW.md) |
-| Interactive web prototype with simulated GPS | `index.html` (this folder) |
+| Interactive web prototype: simulated **and live** GPS, Google sign-in | `index.html` (this folder) |
+| Google sign-in & live-GPS setup | [docs/SETUP_GOOGLE.md](docs/SETUP_GOOGLE.md) |
 
 ## Running the prototype
 
-1. Open **`index.html`** in Chrome, Edge, Firefox or Safari. Double-clicking works, and no server or build step is needed.
+**Quick look:** open **`index.html`** directly in Chrome, Edge, Firefox or Safari. Simulated routes work this way.
+
+**Full version (Google sign-in + real GPS):** run the tiny local server (needs Node, nothing to install):
+
+```
+node serve.js        # then open http://localhost:5173
+```
+
+1. Put your Google OAuth Client ID in [`js/config.js`](js/config.js) (see [docs/SETUP_GOOGLE.md](docs/SETUP_GOOGLE.md)). Without it, the app runs in guest mode.
 2. An internet connection is needed only for the map tiles. Everything else (including Leaflet, in `vendor/`) is local. Without internet, the territory still draws on a plain background.
 3. For the phone experience on a desktop, the app renders inside a phone-sized frame. You can also use DevTools device mode.
 
-Progress is saved in `localStorage`. **Profile → Reset prototype** starts over.
+Progress is saved in `localStorage`, with one save per Google account plus a guest save. **Profile → Reset prototype** starts over.
+
+### Real map & location
+
+* The map is real (OpenStreetMap data, Esri basemap). By default the game board sits in a **demo city**, so the scripted test routes line up with the rival zones.
+* Choose **Where do you play? → Around me** in onboarding (or **Profile → Move board to my location**). The board, your home turf and the nearby rivals move to your real position.
+* **GO → Live GPS: go outside** records a real walk or ride with the device's GPS. Real activities go through the same recorder as the simulated ones (mode detection, anti-cheat, damage, loop claims). On a phone this needs HTTPS (e.g. GitHub Pages); see the setup doc.
 
 ### Suggested test run (≈5 minutes)
 
@@ -52,6 +67,9 @@ js/rules.js           every scoring constant & formula (mirrors GAME_RULES.md)
 js/world.js           city grid, zones, seed data, loop claiming, day/decay cycle, leaderboards
 js/sim.js             simulated GPS routes + activity recorder (mode detection, anti-cheat, damage, loops)
 js/app.js             UI: map rendering, HUD, screens, notifications
+js/auth.js            Sign in with Google (Google Identity Services)
+js/config.js          your Google OAuth Client ID
+serve.js              zero-dependency local server (http://localhost:5173)
 tests/                headless scenario tests (Node)
 vendor/leaflet/       Leaflet 1.9.4 (BSD-2-Clause)
 docs/                 rules + screens/flow

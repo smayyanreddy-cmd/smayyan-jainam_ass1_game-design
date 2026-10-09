@@ -39,15 +39,15 @@ flowchart LR
 | 1 | **Onboarding: Welcome** | Hook and core idea | Animated "loop becomes territory" art, logo, tagline *Walk it. Ride it. Own it.* |
 | 2 | **Onboarding: Attack & defend** | Teach the combat rule | Health-bar art, `Damage = distance × intensity`, walking vs cycling multipliers |
 | 3 | **Onboarding: Stay active** | Set expectations about penalties | Penalty ladder −5 → −50 cap, daily minimum, rest token, streaks |
-| 4 | **Onboarding: Make your player** | Identity and permissions | Name, territory colour (4 neon options), clan join / solo, HR monitor, notifications, location note |
+| 4 | **Onboarding: Make your player** | Identity and permissions | **Continue with Google** (or guest), name (pre-filled from Google), territory colour, clan join / solo, HR monitor, notifications, **Where do you play? Around me / Demo city** (asks for location) |
 | 5 | **Map (home)** | See the board | Live map with neon zones, zone labels (name, owner, HP bar, HP number, *decaying* / *damaged* tags), points, streak, daily-minimum ring, sunlight toggle, bell, legend, recentre, **GO** button |
-| 6 | **Start sheet** | Set up an activity | Route list (prototype: simulated GPS), mode **Auto / Walk / Cycle**, group size, HR toggle, sim speed |
+| 6 | **Start sheet** | Set up an activity | **Live GPS: go outside** (real recording) plus simulated test routes. Mode **Auto / Walk / Cycle**. Group size, HR toggle and sim speed (hidden for live GPS) |
 | 6b | **Draw-your-route** | Free testing | Tap waypoints on the map, speed slider, *Ride it* |
 | 7 | **Recording HUD** | Live feedback while moving | Big damage counter, distance / time / speed / points, context badge (*Attacking X* / *Defending Y* / *Neutral ground*), chips for mode, intensity ×, HR zone, streak ×, **COMBO ×**, grade. Daily-minimum bar, damage numbers popping on the map, anti-cheat banner, *AREA CLAIMED* / *ZONE BROKEN* banners, pause / speed / finish |
 | 8 | **Post-activity summary** | Payoff | 4 hero tiles: **Damage dealt · Area claimed · Points earned · Penalty avoided**. Points breakdown (base, streak, combo, defend, claim, break), territory events, anti-cheat report, badges unlocked |
 | 9 | **Leaderboards** | Social comparison | Tabs: Friends · City · Weekly damage · Biggest territory · Clans. Your row highlighted |
 | 10 | **Clan** | Team play | Clan territory, weekly damage, members. Shared zones with HP and a *defend →* shortcut that flies the map to the zone. How clans work |
-| 11 | **Profile** | Long-term progress | Total points, damage dealt, **points lost to inactivity**, streak / best, territory, rest tokens, badges, recent activity, settings (sunlight mode, HR, notifications, colour) |
+| 11 | **Profile** | Long-term progress | Google account card (photo, email, sign out) or *Continue with Google*. Total points, damage dealt, **points lost to inactivity**, streak / best, territory, rest tokens, badges, recent activity. Settings: sunlight mode, HR, notifications, colour, **board location** |
 | 12 | **Notifications** | Re-engagement | *Under attack*, *zone decaying*, *zone lost*, *streak reminder*, *missed-day penalty*, *badge unlocked* |
 | — | **Time machine** *(prototype only, in Profile)* | Test the daily systems | *Skip day (inactive)*, *Use rest token*, *End day* |
 
@@ -93,9 +93,10 @@ flowchart LR
 
 | Area | Prototype | Production plan |
 |---|---|---|
-| GPS | Simulated 1 Hz samples along scripted or drawn routes | `navigator.geolocation.watchPosition` / native background location. The recorder API is the same, so it's a drop-in swap |
+| GPS | Both: simulated routes for testing, plus **live GPS** (`watchPosition`, resampled to 1 Hz; fixes worse than ±35 m dropped) | Native background location, so recording continues with the screen off |
+| Accounts | **Sign in with Google** (Google Identity Services), with one local save per account | Backend verifies the Google ID token and syncs progress across devices |
 | Heart rate | Modelled from speed and grade | BLE HR straps / HealthKit / Health Connect |
 | Rivals | 3 scripted bots (Mira, Vex, Kai) + static leaderboard NPCs | Real players, server-side territory |
 | Days | *Time machine* button | Real midnight in the player's timezone |
 | Storage | `localStorage` | Backend with server-side anti-cheat re-validation |
-| Map | Leaflet + Esri Canvas basemap tiles | Same, or vector tiles with a custom style |
+| Map | Leaflet + Esri Canvas basemap tiles (real streets). The board is anchored in the demo city or at the player's real location | Same, or vector tiles with a custom style |

@@ -5,14 +5,21 @@
   'use strict';
   const R = window.Rules;
 
-  // Generic city with a north-aligned street grid (Chicago, West Town).
-  const ORIGIN = { lat: 41.8960, lng: -87.6700 };
+  // Demo city with a north-aligned street grid (Chicago, West Town). When the
+  // player shares their real location, the whole board moves there instead.
+  const DEMO_ORIGIN = { lat: 41.8960, lng: -87.6700 };
+  const ORIGIN = { ...DEMO_ORIGIN };
   const M_LAT = 111320;
-  const M_LNG = 111320 * Math.cos(ORIGIN.lat * Math.PI / 180);
+  let M_LNG = 111320 * Math.cos(ORIGIN.lat * Math.PI / 180);
   const CELL = 66; // metres; one territory cell ≈ 0.0044 km²
 
   const Geo = {
-    ORIGIN, CELL,
+    ORIGIN, DEMO_ORIGIN, CELL,
+    /** Re-anchor the board (home cell) at a real lat/lng. Positions are stored in metres, so everything moves with it. */
+    setOrigin(o) {
+      ORIGIN.lat = o.lat; ORIGIN.lng = o.lng;
+      M_LNG = 111320 * Math.cos(ORIGIN.lat * Math.PI / 180);
+    },
     toLL: (x, y) => [ORIGIN.lat + y / M_LAT, ORIGIN.lng + x / M_LNG],
     toXY: (lat, lng) => [(lng - ORIGIN.lng) * M_LNG, (lat - ORIGIN.lat) * M_LAT],
     dist: (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]),
@@ -60,7 +67,9 @@
 
   // ---------------------------------------------------------------- state
 
+  // One save slot per Google account; guests share the plain key.
   const STORE_KEY = 'pedalpace.v1';
+  const keyFor = (accountId) => (accountId ? STORE_KEY + '.' + accountId : STORE_KEY);
 
   function rect(i0, i1, j0, j1) {
     const out = [];
@@ -72,6 +81,8 @@
     const s = {
       v: 1,
       onboarded: false,
+      origin: null,    // {lat, lng, real: bool} home anchor; null until onboarding picks one
+      account: null,   // {sub, name, email, picture} when signed in with Google
       day: 1,
       player: { id: 'you', name: 'You', color: 'cyan', clan: 'neon', hr: true, notifications: true },
       settings: { sunlight: false, playback: 20 },
@@ -114,18 +125,20 @@
     return s.zones[id];
   }
 
-  function load() {
+  /** Saved state for an account (or the guest slot), or null if none. */
+  function loadSaved(accountId) {
     try {
-      const raw = localStorage.getItem(STORE_KEY);
+      const raw = localStorage.getItem(keyFor(accountId));
       if (raw) { const s = JSON.parse(raw); if (s && s.v === 1) return s; }
     } catch (e) { /* storage unavailable: fall through */ }
-    return newState();
+    return null;
   }
+  function load(accountId) { return loadSaved(accountId) || newState(); }
   function save(s) {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(s)); } catch (e) { /* ignore */ }
+    try { localStorage.setItem(keyFor(s.account && s.account.sub), JSON.stringify(s)); } catch (e) { /* ignore */ }
   }
-  function reset() {
-    try { localStorage.removeItem(STORE_KEY); } catch (e) { /* ignore */ }
+  function reset(accountId) {
+    try { localStorage.removeItem(keyFor(accountId)); } catch (e) { /* ignore */ }
     return newState();
   }
 
@@ -333,7 +346,7 @@
 
   window.World = {
     Geo, COLORS, PLAYER_COLORS, CLANS, BADGES,
-    load, save, reset, newState, notify,
+    load, loadSaved, save, reset, newState, notify,
     isFriendly, zoneAt, neutraliseZone, claimLoop, areaKm2, ownedCells,
     addDailyProgress, endDay, leaderboardRows,
   };
