@@ -4,6 +4,8 @@ window.PEDALPACE_CONFIG = {
   // Paste the object Firebase shows you here. Leave it as null to play offline:
   // single player, saved on this device only, no friends.
   // A Firebase web config is not a secret; the security rules in firestore.rules protect the data.
+  // Bump this number and redeploy to sign every player out once.
+  sessionEpoch: 2,
   firebase: {
     apiKey: 'AIzaSyDHOTiFSCBkraXsPoFMPWAl2e8i-nBdLZs',
     authDomain: 'pedalpace.firebaseapp.com',

@@ -94,7 +94,7 @@
       week: weekIndex(today),
       badges: {},
       history: [],
-      settings: { sunlight: false, notifications: true, mapStyle: 'satellite' },
+      settings: { dark: false, notifications: true, mapStyle: 'satellite' },
     };
   }
 

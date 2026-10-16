@@ -30,10 +30,15 @@
   let zoneCenter = null, run = null, globalCache = null;
   const ui = { tab: 'map', mode: 'auto', rankTab: 'friends', card: null };
 
-  const settings = () => (P && P.settings) || { sunlight: false, notifications: true, mapStyle: 'satellite' };
-  const theme = () => (settings().sunlight ? 'sun' : 'neon');
-  const myColor = () => W.colorHex(P ? P.color : 'cyan', theme());
-  const zoneColor = (z) => W.colorHex(z.color, theme());
+  const settings = () => (P && P.settings) || { dark: false, notifications: true, mapStyle: 'satellite' };
+  // Strava-style UI: light by default, optional dark mode. The UI accent is always brand orange;
+  // player colours are for territory only. Bright colours on photo/dark maps, deeper ones on the light map.
+  const theme = () => (settings().dark ? 'dark' : 'light');
+  const darkMap = () => settings().mapStyle !== 'streets';
+  const pal = () => (darkMap() ? 'neon' : 'sun');
+  const myColor = () => W.colorHex(P ? P.color : 'cyan', pal());
+  const zoneColor = (z) => W.colorHex(z.color, pal());
+  const avColor = (c) => W.colorHex(c, 'neon');
   const zoneList = () => [...zones.values()];
   const isMine = (z) => !!user && z.owner === user.uid;
   const isFriend = (ownerId) => !!P && (P.friends || []).includes(ownerId);
@@ -61,7 +66,7 @@
       L.tileLayer(ESRI + 'Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', { ...o, maxNativeZoom: 18, pane: 'labels', opacity: 0.8 }),
       L.tileLayer(ESRI + 'Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { ...o, maxNativeZoom: 18, pane: 'labels' }),
     ];
-    if (style === 'dark' && theme() !== 'sun') return [
+    if (style === 'dark') return [
       L.tileLayer(ESRI + 'Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', { ...o, maxNativeZoom: 16, attribution: 'Tiles &copy; Esri, HERE, Garmin, ' + OSM_ATTR }),
       L.tileLayer(ESRI + 'Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', { ...o, maxNativeZoom: 16, pane: 'labels', opacity: 0.75 }),
     ];
@@ -86,23 +91,21 @@
   const hpColor = (pct) => (pct > 60 ? '#3DFF9A' : pct > 30 ? '#FFC531' : '#FF3B5C');
   const hpOf = (z) => Math.max(0, W.effHp(z));
   function fillFor(z) {
-    const base = theme() === 'sun' ? 0.18 : settings().mapStyle === 'satellite' ? 0.2 : 0.12;
+    const base = settings().mapStyle === 'satellite' ? 0.2 : 0.14;
     return base + 0.3 * hpOf(z) / z.maxHp;
   }
 
   function renderTerritory() {
     zoneLayer.clearLayers(); labelLayer.clearLayers();
     for (const k in zoneViews) delete zoneViews[k];
-    const sun = theme() === 'sun';
     for (const z of zones.values()) {
       if (W.effHp(z) <= 0) continue; // broken by decay: free ground
       const col = zoneColor(z), dec = W.isDecaying(z);
       const fill = L.geoJSON(z.geo, { renderer, stroke: false, fillColor: col, fillOpacity: fillFor(z) }).addTo(zoneLayer);
       fill.on('click', (e) => { L.DomEvent.stopPropagation(e); openZoneCard(z.id); });
       const edge = { renderer, interactive: false, fill: false };
-      if (!sun) L.geoJSON(z.geo, { ...edge, color: col, weight: 10, opacity: 0.25 }).addTo(zoneLayer);
-      else L.geoJSON(z.geo, { ...edge, color: '#000', weight: 6, opacity: 0.85 }).addTo(zoneLayer);
-      L.geoJSON(z.geo, { ...edge, color: col, weight: sun ? 3.5 : 3, dashArray: dec ? '8 7' : null }).addTo(zoneLayer);
+      L.geoJSON(z.geo, { ...edge, color: '#fff', weight: 6, opacity: 0.9 }).addTo(zoneLayer); // white casing, Strava route style
+      L.geoJSON(z.geo, { ...edge, color: col, weight: 3, dashArray: dec ? '8 7' : null }).addTo(zoneLayer);
       const icon = L.divIcon({ className: 'zl-wrap', html: labelHtml(z), iconSize: null });
       const m = L.marker([z.clat, z.clng], { icon, keyboard: false, interactive: false }).addTo(labelLayer);
       zoneViews[z.id] = { fill, marker: m };
@@ -173,7 +176,7 @@
     const now = Date.now();
     for (const l of Object.values(live)) {
       if (now - l.ts > 120000) continue;
-      const html = `<div class="fdot ${l.recording ? 'rec' : ''}" style="--c:${W.colorHex(l.color, theme())}"><b>${esc((l.name || '?')[0])}</b><small>${esc(l.name)}${l.mode === 'cycle' ? ' 🚴' : l.mode === 'walk' ? ' 🚶' : ''}</small></div>`;
+      const html = `<div class="fdot ${l.recording ? 'rec' : ''}" style="--c:${avColor(l.color)}"><b>${esc((l.name || '?')[0])}</b><small>${esc(l.name)}${l.mode === 'cycle' ? ' 🚴' : l.mode === 'walk' ? ' 🚶' : ''}</small></div>`;
       L.marker([l.lat, l.lng], { icon: L.divIcon({ className: 'me-wrap', html, iconSize: [34, 34], iconAnchor: [17, 17] }), interactive: false, keyboard: false, zIndexOffset: 900 }).addTo(friendLayer);
     }
   }
@@ -319,9 +322,9 @@
 
   function applyTheme() {
     document.documentElement.dataset.theme = theme();
-    document.documentElement.style.setProperty('--me', myColor());
-    $('meta[name=theme-color]').setAttribute('content', theme() === 'sun' ? '#FFFFFF' : '#0B0F17');
-    $('#btn-sun').setAttribute('aria-pressed', String(settings().sunlight));
+    document.documentElement.style.setProperty('--player', avColor(P ? P.color : 'cyan'));
+    $('meta[name=theme-color]').setAttribute('content', theme() === 'dark' ? '#121212' : '#ffffff');
+    $('#btn-sun').setAttribute('aria-pressed', String(!!settings().dark));
     setTiles(); renderTerritory(); renderFriendsLive();
   }
 
@@ -454,7 +457,7 @@
   function updateDraw() {
     draw.line.setLatLngs(draw.pts);
     draw.dots.clearLayers();
-    draw.pts.forEach((p, n) => L.circleMarker(p, { radius: n ? 5 : 8, color: '#000', weight: 2, fillColor: myColor(), fillOpacity: 1 }).addTo(draw.dots));
+    draw.pts.forEach((p, n) => L.circleMarker(p, { radius: n ? 5 : 8, color: '#fff', weight: 2, fillColor: myColor(), fillOpacity: 1 }).addTo(draw.dots));
     let m = 0; for (let n = 1; n < draw.pts.length; n++) m += Geo.distLL(draw.pts[n - 1], draw.pts[n]);
     $('#draw-count').textContent = draw.pts.length;
     $('#draw-km').textContent = (m / 1000).toFixed(2);
@@ -551,7 +554,7 @@
   function placeStart() {
     const s = run.rec.start;
     L.marker(s, { icon: L.divIcon({ className: 'me-wrap', html: '<div class="start-flag">🏁</div>', iconSize: [30, 30], iconAnchor: [15, 15] }), interactive: false, keyboard: false }).addTo(trackLayer);
-    run.closeLine = L.polyline([s, s], { renderer, color: theme() === 'sun' ? '#000' : '#fff', weight: 3, dashArray: '2 9', opacity: 0.9, interactive: false }).addTo(trackLayer);
+    run.closeLine = L.polyline([s, s], { renderer, color: darkMap() ? '#fff' : '#43423f', weight: 3, dashArray: '2 9', opacity: 0.9, interactive: false }).addTo(trackLayer);
   }
 
   function drawTrack() {
@@ -562,8 +565,8 @@
     if (!run.line || run.lineValid !== s.valid) {
       const start = run.line ? [run.line.getLatLngs().slice(-1)[0], ll] : [ll];
       if (s.valid) {
-        run.glow = theme() === 'neon' ? L.polyline(start, { renderer, color: myColor(), weight: 13, opacity: 0.3, interactive: false }).addTo(trackLayer) : null;
-        run.line = L.polyline(start, { renderer, color: theme() === 'sun' ? '#000' : myColor(), weight: 5, interactive: false }).addTo(trackLayer);
+        run.glow = L.polyline(start, { renderer, color: '#fff', weight: 9, opacity: 0.95, interactive: false }).addTo(trackLayer); // casing
+        run.line = L.polyline(start, { renderer, color: myColor(), weight: 5, interactive: false }).addTo(trackLayer);
       } else {
         run.glow = null;
         run.line = L.polyline(start, { renderer, color: '#FF3B5C', weight: 4, dashArray: '3 8', interactive: false }).addTo(trackLayer);
@@ -935,7 +938,7 @@
       <div class="tabs" role="tablist">${RANK_TABS.map((t) => `<button role="tab" aria-selected="${t.id === tab.id}" data-rt="${t.id}">${t.name}</button>`).join('')}</div>
       <p class="muted small">${tab.id === 'weekly' ? 'You and your friends. Resets every Monday.' : tab.id === 'territory' ? 'Area held right now, you and your friends.' : tab.id === 'global' ? (online ? 'Top 50 PedalPace players.' : 'Needs online mode (Firebase).') : 'You and your friends.'}</p>
       <ol class="ranks">${rows.map((u, n) => { const [v, unit] = val(u); return `<li class="${u.me ? 'me' : ''}"><span class="rk">${n < 3 ? ['🥇', '🥈', '🥉'][n] : n + 1}</span>
-        <span class="av" style="--c:${W.colorHex(u.color, theme())}">${esc((u.name || '?')[0])}</span>
+        <span class="av" style="--c:${avColor(u.color)}">${esc((u.name || '?')[0])}</span>
         <span class="nm"><b>${esc(u.name)}${u.me ? ' (you)' : ''}</b><small>${kmTxt(u.stats.km)} km · streak ${u.stats.streak || 0}</small></span>
         <span class="val"><b>${v}</b><small>${unit}</small></span></li>`; }).join('')}</ol>
       ${!friends.length && tab.id !== 'global' ? `<p class="note small">${online ? 'Add friends from the <b>Friends</b> tab to compete with them here.' : 'Friends and shared leaderboards need online mode. See docs/SETUP_FIREBASE.md.'}</p>` : ''}
@@ -986,7 +989,7 @@
           <div class="row gap"><input id="fr-code" maxlength="6" placeholder="e.g. K7Q2MX" autocapitalize="characters" value="${esc(pendingAddUsed ? '' : pendingAdd)}"/><button class="btn btn-primary" type="submit">Add</button></div></label>
       </form>
       <h2>Your friends (${list.length})</h2>
-      <ul class="zone-list">${list.map((u) => `<li class="friend-row"><span class="av" style="--c:${W.colorHex(u.color, theme())}">${esc((u.name || '?')[0])}</span>
+      <ul class="zone-list">${list.map((u) => `<li class="friend-row"><span class="av" style="--c:${avColor(u.color)}">${esc((u.name || '?')[0])}</span>
         <span class="nm"><b>${esc(u.name)}</b><small>${lastActive(u)} · ${areaParts(u.stats.areaM2 || 0).join(' ')}</small></span>
         <span class="val"><b>${fmt(u.stats.totalPoints || 0)}</b><small>pts</small></span>
         <button class="icon-btn sm" data-fly="${u.uid}" aria-label="Show ${esc(u.name)} on the map" title="Show on map"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg></button>
@@ -1054,7 +1057,7 @@
     const nextPen = R.inactivityPenalty(st.missedDays + 1);
     const [aV, aU] = areaParts(st.areaM2 || 0);
     el.innerHTML = `<div class="screen-inner">
-      <div class="prof-head">${P.photo ? `<img class="av big" src="${esc(P.photo)}" alt="" referrerpolicy="no-referrer">` : `<span class="av big" style="--c:${myColor()}">${esc(P.name[0] || '?')}</span>`}
+      <div class="prof-head">${P.photo ? `<img class="av big" src="${esc(P.photo)}" alt="" referrerpolicy="no-referrer">` : `<span class="av big" style="--c:${avColor(P.color)}">${esc(P.name[0] || '?')}</span>`}
         <div><h1 id="prof-title">${esc(P.name)}</h1><p class="muted">${online ? 'Friend code ' + esc(P.code) : 'Offline mode'} · ${st.activities} trips</p></div></div>
       ${accountCard()}
       <div class="tiles">
@@ -1082,10 +1085,10 @@
       <h2>Settings</h2>
       <div class="settings">
         <label class="field"><span>Name</span><div class="row gap"><input id="set-name" maxlength="14" value="${esc(P.name)}"/><button class="btn" id="set-name-save">Save</button></div></label>
-        <div class="opt-row"><span class="opt-label">Colour</span><div class="swatches">${W.PLAYER_COLORS.map((c) => `<button class="sw ${P.color === c ? 'on' : ''}" data-col="${c}" style="--c:${W.colorHex(c, theme())}" aria-label="${W.COLORS[c].name}" aria-pressed="${P.color === c}"></button>`).join('')}</div></div>
+        <div class="opt-row"><span class="opt-label">Colour</span><div class="swatches">${W.PLAYER_COLORS.map((c) => `<button class="sw ${P.color === c ? 'on' : ''}" data-col="${c}" style="--c:${avColor(c)}" aria-label="${W.COLORS[c].name}" aria-pressed="${P.color === c}"></button>`).join('')}</div></div>
         <div class="opt-row"><span class="opt-label" id="lbl-style">Map type</span><div class="seg" role="radiogroup" aria-labelledby="lbl-style" id="set-style">
           ${['satellite', 'streets', 'dark'].map((s) => `<button role="radio" data-v="${s}" aria-checked="${settings().mapStyle === s}">${{ satellite: 'Satellite', streets: 'Map', dark: 'Dark' }[s]}</button>`).join('')}</div></div>
-        <label class="switch-row"><span>☀️ Sunlight mode (high contrast)</span><input type="checkbox" id="set-sun" ${settings().sunlight ? 'checked' : ''}/><i aria-hidden="true"></i></label>
+        <label class="switch-row"><span>Dark mode</span><input type="checkbox" id="set-sun" ${settings().dark ? 'checked' : ''}/><i aria-hidden="true"></i></label>
         <label class="switch-row"><span>Notification pop-ups</span><input type="checkbox" id="set-notif" ${settings().notifications ? 'checked' : ''}/><i aria-hidden="true"></i></label>
         ${online ? '<button class="btn btn-block" id="set-out">Sign out</button>' : '<button class="btn btn-block" id="set-reset">Reset all progress</button>'}
       </div>
@@ -1105,7 +1108,7 @@
     };
     $$('#screen-profile [data-col]').forEach((b) => (b.onclick = () => { P.color = b.dataset.col; saveP(); updateMyZones({ color: P.color }); applyTheme(); renderProfile(); }));
     $('#set-style').onclick = (e) => { const b = e.target.closest('button'); if (b) { setMapStyle(b.dataset.v); renderProfile(); } };
-    $('#set-sun').onchange = (e) => { P.settings.sunlight = e.target.checked; saveP(); applyTheme(); renderProfile(); };
+    $('#set-sun').onchange = (e) => { P.settings.dark = e.target.checked; saveP(); applyTheme(); renderProfile(); };
     $('#set-notif').onchange = (e) => { P.settings.notifications = e.target.checked; saveP(); };
     if ($('#set-out')) $('#set-out').onclick = () => { if (!run) Store.signOut(); };
     if ($('#set-reset')) $('#set-reset').onclick = async () => { if (confirm('Delete all your zones and progress on this device?')) { await Store.resetLocal(); location.reload(); } };
@@ -1170,18 +1173,19 @@
 
   async function onAuth(u) {
     $('#loading').hidden = true;
-    if (!u) { teardown(); user = null; P = null; renderOnboarding(obStep >= 3 ? 3 : 0); return; }
+    if (!u) { teardown(); user = null; P = null; renderOnboarding(obStep >= OB.SIGNIN ? OB.SIGNIN : OB.WELCOME); return; }
     if (user && user.uid === u.uid && P) { user = u; return; } // token refresh / link
     teardown();
     user = u;
     try { P = await Store.loadProfile(u.uid); } catch (e) { showFatal('Could not load your profile: ' + e.message); return; }
     isNewProfile = !P;
     if (!P) P = W.newProfile({ name: (u.name || '').split(' ')[0].slice(0, 14), color: W.PLAYER_COLORS[Math.floor(Math.random() * 4)], photo: u.photo });
-    P.settings = { sunlight: false, notifications: true, mapStyle: 'satellite', ...(P.settings || {}) };
+    P.settings = { dark: false, notifications: true, mapStyle: 'satellite', ...(P.settings || {}) };
+    delete P.settings.sunlight; // replaced by dark mode
     P.friends = P.friends || [];
     if (!P.photo && u.photo) P.photo = u.photo;
     applyTheme();
-    if (!P.onboarded) renderOnboarding(online || obStep >= 2 ? 4 : 0);
+    if (!P.onboarded) renderOnboarding(online || obStep >= OB.RULES ? OB.PROFILE : OB.WELCOME);
     else startGame();
   }
 
@@ -1211,71 +1215,155 @@
     if (pendingAdd && online && !pendingAddUsed) { pendingAddUsed = true; showTab('friends'); addFriendByCode(pendingAdd); }
   }
 
-  function renderOnboarding(step) {
+  // ---------------------------------------------------------------- onboarding (Apple iOS style)
+  // Welcome feature list → how points work (inset grouped list) → sign in (online) →
+  // profile (inset grouped) → location permission priming. SF Symbol-style icons, system colours.
+
+  const OB = { WELCOME: 0, RULES: 1, SIGNIN: 2, PROFILE: 3, LOCATION: 4 };
+  const SYM = {
+    map: '<path d="M9 4 3 6.5V20l6-2.5 6 2.5 6-2.5V4l-6 2.5z"/><path d="M9 4v13.5M15 6.5V20"/>',
+    bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
+    people: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.6a4.5 4.5 0 0 1 6 4.4"/>',
+    flame: '<path d="M12 22c4 0 7-2.7 7-6.6 0-3.8-3-6.4-4.5-9.4-.5 2-1.6 3.3-2.8 4C11.2 7.3 10 4.6 10 2 6.8 4.6 5 8.6 5 15.4 5 19.3 8 22 12 22z"/>',
+    walk: '<circle cx="13" cy="4" r="2"/><path d="M10 22l2-7 3 3v4M7 12l3-4 4 1 2 4 3 1M12 15l-2-5"/>',
+    bike: '<circle cx="6" cy="16" r="4"/><circle cx="18" cy="16" r="4"/><path d="M6 16l4-8h5l3 8M10 8l2 8H6M14 5h2"/>',
+    check: '<circle cx="12" cy="12" r="9.5"/><path d="M7.5 12.5l3 3 6-6.5"/>',
+    minus: '<circle cx="12" cy="12" r="9.5"/><path d="M8 12h8"/>',
+    moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
+    person: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3.5"/><path d="M5.6 18.6a7.5 7.5 0 0 1 12.8 0"/>',
+    location: '<path d="M20.5 3.5 3.5 10.6l7.2 2.7 2.7 7.2z"/>',
+    chevron: '<path d="M15 5l-7 7 7 7"/>',
+  };
+  const sym = (n, cls) => `<svg class="${cls || 'ios-sym'}" viewBox="0 0 24 24" aria-hidden="true">${SYM[n]}</svg>`;
+  const tile = (n, color) => `<span class="ios-tile" style="--t:${color}">${sym(n, 'ios-tile-sym')}</span>`;
+
+  function obSequence() { return online ? [OB.WELCOME, OB.RULES, OB.SIGNIN, OB.PROFILE, OB.LOCATION] : [OB.WELCOME, OB.RULES, OB.PROFILE, OB.LOCATION]; }
+  function obNext(step) {
+    if (step === OB.RULES) return online && !user ? OB.SIGNIN : OB.PROFILE;
+    if (step === OB.PROFILE) return OB.LOCATION;
+    return step + 1;
+  }
+  function obBack(step) {
+    if (step === OB.RULES) return OB.WELCOME;
+    if (step === OB.SIGNIN) return OB.RULES;
+    if (step === OB.PROFILE) return online ? null : OB.RULES; // signed in: no way back to sign-in
+    if (step === OB.LOCATION) return OB.PROFILE;
+    return null;
+  }
+
+  function renderOnboarding(step, dir) {
+    if (step === OB.PROFILE && !P) step = online ? OB.SIGNIN : OB.WELCOME;
+    const forward = dir !== 'back';
     obStep = step;
     const el = $('#screen-onboarding');
     setChrome('none');
-    const total = online ? 5 : 4;
-    const dotIdx = online ? step : step === 4 ? 3 : step;
-    const steps = {
-      0: `<div class="ob-art art-map" aria-hidden="true"><i class="z z1"></i><i class="z z2"></i><i class="z z3"></i><i class="trail"></i></div>
-       <p class="eyebrow">Welcome to</p><h1 class="logo">PEDAL<span>PACE</span></h1>
-       <p class="lead">Walk it. Ride it. <b>Own it.</b></p>
-       <p>Start a trip and your route is drawn on the real map behind you. Tap <b>End</b> and the app joins your end point back to your start: the whole shape becomes <b>your zone</b>.</p>`,
-      1: `<div class="ob-art art-fight" aria-hidden="true"><span class="hp"><i></i></span><span class="pop">⚔ 12</span></div>
-       <h1>Attack &amp; defend</h1>
-       <p>Walking or riding through another player’s zone <b>deals damage</b>. Break it to 0 HP and its ground is free, so loop around it to take it.</p>
-       <div class="formula">Damage = distance × intensity</div>
-       <ul class="ticks"><li>🚶 Walking: 1.0× base · 1.3× brisk · 1.5× uphill</li><li>🚴 Cycling: 0.4× base + sustained-speed bonuses</li><li>Balanced so a 30-min walk and a 30-min ride score about the same</li></ul>`,
-      2: `<div class="ob-art art-ladder" aria-hidden="true"><span>−5</span><span>−10</span><span>−20</span><span>−40</span><span>−50</span></div>
-       <h1>Stay active, not overtrained</h1>
-       <p>Days without a trip cost points, starting small and <b>capped at −50/day</b>. Zones of inactive players decay.</p>
-       <ul class="ticks"><li>✅ Daily minimum: <b>15 min walking</b> or <b>5 km cycling</b></li><li>😴 <b>1 rest token per week</b>: recovery days are never punished</li><li>🔥 Streaks add up to +20% damage</li></ul>`,
-      3: `<h1>Sign in</h1>
-       <p>Your zones, points and friends are saved online, so friends can see and fight over your territory.</p>
-       <button class="btn btn-google btn-block" id="ob-google">${GOOGLE_G} Continue with Google</button>
-       <button class="btn btn-block" id="ob-guest">Play as a guest</button>
-       <p class="small muted">Guests can link a Google account later from Profile.</p>`,
-      4: P ? `<h1>Make your player</h1>
-       <label class="field"><span>Name</span><input id="ob-name" maxlength="14" value="${esc(P.name === 'Player' ? '' : P.name)}" placeholder="e.g. Sam" autocomplete="nickname"/></label>
-       <div class="field"><span>Territory colour</span><div class="swatches">${W.PLAYER_COLORS.map((c) => `<button class="sw ${P.color === c ? 'on' : ''}" data-col="${c}" style="--c:${W.COLORS[c].neon}" aria-label="${W.COLORS[c].name}" aria-pressed="${P.color === c}"></button>`).join('')}</div></div>
-       <div class="field"><span>Your location</span>
-         <button class="btn" id="ob-loc">📍 Allow location</button>
-         <small class="muted" id="ob-loc-note">${geo.state === 'ok' ? '✓ Found you. The map starts where you are.' : 'The map starts where you are, and trips are tracked with GPS. Your position is only shared with friends while you’re on a trip.'}</small></div>` : '',
-    };
-    el.innerHTML = `<div class="screen-inner ob">
-      ${steps[step]}
-      <div class="ob-nav">
-        <div class="dots" aria-label="Step ${dotIdx + 1} of ${total}">${Array.from({ length: total }, (_, n) => `<i class="${n === dotIdx ? 'on' : ''}"></i>`).join('')}</div>
-        <div class="row gap">
-          ${step === 0 ? '<button class="btn btn-ghost" id="ob-skip">Skip</button>' : step < 3 || (step === 4 && !online) ? '<button class="btn" id="ob-back">Back</button>' : ''}
-          ${step === 3 ? '' : `<button class="btn btn-primary" id="ob-next">${step === 4 ? 'Let’s go' : 'Next'}</button>`}
-        </div>
-      </div></div>`;
+    const seq = obSequence(), at = seq.indexOf(step), back = obBack(step);
+    const grouped = step === OB.RULES || step === OB.PROFILE;
+    const located = geo.state === 'ok';
+    const swatches = P ? W.PLAYER_COLORS.map((c) => `<button class="sw ${P.color === c ? 'on' : ''}" data-col="${c}" style="--c:${W.COLORS[c].neon}" aria-label="${W.COLORS[c].name}" aria-pressed="${P.color === c}"></button>`).join('') : '';
+    const body = {
+      [OB.WELCOME]: `
+        <h1 class="ios-large ios-center">Welcome to<br><span class="ios-tint">PedalPace</span></h1>
+        <ul class="ios-features">
+          <li>${sym('map')}<div><b>Claim your territory</b><p>Walk or ride anywhere. Tap End and your route closes back to the start: the whole shape becomes your zone.</p></div></li>
+          <li>${sym('bolt')}<div><b>Attack and defend</b><p>Moving through a rival’s zone damages it. Loop around it and the newest claim wins the ground.</p></div></li>
+          <li>${sym('people')}<div><b>Play with friends</b><p>See friends live on the map, and trip together for a combo bonus.</p></div></li>
+          <li>${sym('flame')}<div><b>Stay active</b><p>15 minutes of walking or 5 km of cycling a day keeps your streak alive and your zones safe.</p></div></li>
+        </ul>`,
+      [OB.RULES]: `
+        <h1 class="ios-large">How points work</h1>
+        <p class="ios-section-h">Scoring</p>
+        <ul class="ios-group">
+          <li>${tile('bolt', 'var(--ios-tint)')}<div class="ios-cell"><b>Damage = distance × intensity</b><small>Every metre you move scores points</small></div></li>
+          <li>${tile('walk', 'var(--ios-green)')}<div class="ios-cell"><b>Walking</b><small>1.0× · brisk 1.3× · uphill 1.5×</small></div></li>
+          <li>${tile('bike', 'var(--ios-blue)')}<div class="ios-cell"><b>Cycling</b><small>0.4× plus bonuses for sustained speed</small></div></li>
+        </ul>
+        <p class="ios-section-f">A 30-minute walk and a 30-minute ride score about the same.</p>
+        <p class="ios-section-h">Stay active</p>
+        <ul class="ios-group">
+          <li>${tile('check', 'var(--ios-green)')}<div class="ios-cell"><b>Daily minimum</b><small>15 min walking or 5 km cycling</small></div></li>
+          <li>${tile('minus', 'var(--ios-red)')}<div class="ios-cell"><b>Missed day</b><small>−5 points, doubling each day, capped at −50</small></div></li>
+          <li>${tile('moon', 'var(--ios-indigo)')}<div class="ios-cell"><b>Rest token</b><small>One a week. Rest days are never punished.</small></div></li>
+          <li>${tile('flame', 'var(--ios-orange)')}<div class="ios-cell"><b>Streaks</b><small>Up to +20% damage</small></div></li>
+        </ul>`,
+      [OB.SIGNIN]: `
+        <div class="ios-hero">${sym('person', 'ios-hero-sym')}</div>
+        <h1 class="ios-title ios-center">Sign in to save your progress</h1>
+        <p class="ios-body ios-center ios-2">Your zones, points and friends are saved online, so you can play from any phone and friends can see your territory.</p>`,
+      [OB.PROFILE]: `
+        <h1 class="ios-large">Your profile</h1>
+        <p class="ios-section-h">Name</p>
+        <ul class="ios-group"><li><label class="ios-field"><span class="sr">Name</span><input id="ob-name" maxlength="14" value="${esc(P && P.name !== 'Player' ? P.name : '')}" placeholder="Name" autocomplete="nickname" enterkeyhint="done"/></label></li></ul>
+        <p class="ios-section-f">This is how friends see you on the map and leaderboards.</p>
+        <p class="ios-section-h">Territory colour</p>
+        <ul class="ios-group"><li><div class="ios-cell ios-swatches swatches">${swatches}</div></li></ul>
+        <p class="ios-section-f">Your zones and your route are drawn in this colour.</p>`,
+      [OB.LOCATION]: `
+        <div class="ios-hero ios-hero-blue">${sym('location', 'ios-hero-sym')}</div>
+        <h1 class="ios-title ios-center">Allow location access</h1>
+        <p class="ios-body ios-center ios-2">PedalPace uses your location to start the map where you are and to draw your route while you’re on a trip.</p>
+        <p class="ios-foot-note ios-center" id="ob-loc-note">${located ? 'Location is on. You’re all set.' : 'Friends only see where you are while you’re recording a trip.'}</p>`,
+    }[step];
+
+    const primary = {
+      [OB.WELCOME]: 'Continue', [OB.RULES]: 'Continue', [OB.PROFILE]: 'Continue',
+      [OB.LOCATION]: located ? 'Get started' : 'Allow location',
+    }[step];
+    el.innerHTML = `<div class="ios ${grouped ? 'ios-grouped-bg' : ''}">
+      <header class="ios-nav">
+        ${back != null ? `<button class="ios-back" id="ob-back">${sym('chevron', 'ios-chev')}Back</button>` : '<span></span>'}
+        ${step === OB.RULES ? '<button class="ios-link" id="ob-skip">Skip</button>' : '<span></span>'}
+      </header>
+      <div class="ios-body-wrap ${forward ? 'in-fwd' : 'in-back'}">${body}</div>
+      <footer class="ios-footer">
+        <div class="ios-dots" role="img" aria-label="Page ${at + 1} of ${seq.length}">${seq.map((_, n) => `<i class="${n === at ? 'on' : ''}"></i>`).join('')}</div>
+        ${step === OB.SIGNIN ? `<button class="ios-btn ios-btn-neutral" id="ob-google">${GOOGLE_G}Continue with Google</button>
+          <button class="ios-link ios-link-block" id="ob-guest">Continue as guest</button>
+          <p class="ios-foot-note ios-center">Guests can link a Google account later in Profile.</p>`
+          : `<button class="ios-btn" id="ob-next">${primary}</button>
+          ${step === OB.LOCATION && !located ? '<button class="ios-link ios-link-block" id="ob-later">Not now</button>' : ''}`}
+      </footer></div>`;
     el.hidden = false;
-    const afterIntro = () => renderOnboarding(online && !user ? 3 : 4);
-    if ($('#ob-next')) $('#ob-next').onclick = () => { if (step < 2) renderOnboarding(step + 1); else if (step === 2) afterIntro(); else finishOnboarding(); };
-    if ($('#ob-back')) $('#ob-back').onclick = () => renderOnboarding(step === 4 ? 2 : step - 1);
-    if ($('#ob-skip')) $('#ob-skip').onclick = afterIntro;
-    if (step === 3) {
+    el.scrollTop = 0;
+
+    const keep = () => { const n = $('#ob-name'); if (n && n.value.trim()) P.name = n.value.trim().slice(0, 14); };
+    if ($('#ob-back')) $('#ob-back').onclick = () => { keep(); renderOnboarding(back, 'back'); };
+    if ($('#ob-skip')) $('#ob-skip').onclick = () => renderOnboarding(obNext(step));
+    if (step === OB.SIGNIN) {
       $('#ob-google').onclick = async () => { try { await Store.signInGoogle(); } catch (e) { if (e.code !== 'auth/popup-closed-by-user') toast('⚠ ' + e.message, 'attack'); } };
       $('#ob-guest').onclick = async () => { try { await Store.signInGuest(); } catch (e) { toast('⚠ ' + (e.code === 'auth/admin-restricted-operation' ? 'Guest sign-in is turned off in Firebase (Authentication → Sign-in method → Anonymous).' : e.message), 'attack'); } };
+      return;
     }
-    if (step === 4) {
-      const keep = () => { const n = $('#ob-name').value.trim(); if (n) P.name = n.slice(0, 14); };
-      $$('#screen-onboarding [data-col]').forEach((b) => (b.onclick = () => { keep(); P.color = b.dataset.col; applyTheme(); renderOnboarding(4); }));
-      $('#ob-loc').onclick = async () => {
-        keep();
-        $('#ob-loc-note').textContent = '📡 Finding you… (allow location access when the browser asks)';
-        try { const p = await Sim.locateOnce(); map.setView([p.lat, p.lng], 17); startGeo(); $('#ob-loc-note').textContent = `✓ Found you (±${Math.round(p.acc)} m). The map starts where you are.`; }
-        catch (e) { $('#ob-loc-note').textContent = '⚠ ' + e.message; }
+    if (step === OB.PROFILE) {
+      $$('#screen-onboarding [data-col]').forEach((b) => (b.onclick = () => {
+        keep(); P.color = b.dataset.col; applyTheme();
+        $$('#screen-onboarding [data-col]').forEach((x) => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); });
+      }));
+      $('#ob-name').onkeydown = (e) => { if (e.key === 'Enter') $('#ob-next').click(); };
+    }
+    if (step === OB.LOCATION) {
+      if ($('#ob-later')) $('#ob-later').onclick = finishOnboarding;
+      $('#ob-next').onclick = async () => {
+        if (geo.state === 'ok') { finishOnboarding(); return; }
+        const btn = $('#ob-next');
+        btn.disabled = true; btn.textContent = 'Finding you…';
+        try {
+          const p = await Sim.locateOnce();
+          map.setView([p.lat, p.lng], 17); startGeo();
+          finishOnboarding();
+        } catch (e) {
+          btn.disabled = false; btn.textContent = 'Try again';
+          $('#ob-loc-note').textContent = e.message;
+          $('#ob-loc-note').classList.add('ios-error');
+        }
       };
+      return;
     }
+    $('#ob-next').onclick = () => { keep(); renderOnboarding(obNext(step)); };
   }
 
   function finishOnboarding() {
-    const n = $('#ob-name') && $('#ob-name').value.trim();
-    P.name = (n || P.name || 'Player').slice(0, 14);
+    P.name = (P.name || 'Player').slice(0, 14);
     P.onboarded = true;
     saveP();
     startGame();
@@ -1293,7 +1381,7 @@
     $$('#tabbar [role=tab]').forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
     $('#btn-start').onclick = openStart;
     $('#btn-bell').onclick = openNotifs;
-    $('#btn-sun').onclick = () => { P.settings.sunlight = !P.settings.sunlight; saveP(); applyTheme(); if (ui.tab !== 'map') showTab(ui.tab); };
+    $('#btn-sun').onclick = () => { P.settings.dark = !P.settings.dark; saveP(); applyTheme(); if (ui.tab !== 'map') showTab(ui.tab); };
     $('#tb-daily').onclick = () => {
       toast(P.metDay === P.today.day ? 'Daily minimum met ✓ No penalty tonight.'
         : `Daily minimum: ${P.today.walkMin.toFixed(0)}/15 min walking or ${P.today.cycleKm.toFixed(1)}/5 km cycling. Missing today costs −${R.inactivityPenalty(P.stats.missedDays + 1)}.`);
@@ -1340,7 +1428,16 @@
 
   wire();
   applyTheme();
-  Store.init(onAuth).catch((e) => showFatal('Could not connect to Firebase. Check your internet connection and js/config.js. (' + e.message + ')'));
+  // Forced sign-out: bump sessionEpoch in js/config.js and every device signs out once
+  // the next time it opens the app.
+  const SESSION_EPOCH = String((window.PEDALPACE_CONFIG || {}).sessionEpoch || 1), EPOCH_KEY = 'pp2.sessionEpoch';
+  function onAuthChecked(u) {
+    let seen = null, canStore = true;
+    try { seen = localStorage.getItem(EPOCH_KEY); localStorage.setItem(EPOCH_KEY, SESSION_EPOCH); } catch (e) { canStore = false; }
+    if (online && u && canStore && seen !== SESSION_EPOCH) { Store.signOut(); return; } // onAuth(null) follows
+    onAuth(u);
+  }
+  Store.init(onAuthChecked).catch((e) => showFatal('Could not connect to Firebase. Check your internet connection and js/config.js. (' + e.message + ')'));
   // Exposed for debugging and automated checks.
   window.PedalPace = { get profile() { return P; }, get zones() { return zones; }, get run() { return run; }, map, beginRun, finishTrip, showTab };
 })();
