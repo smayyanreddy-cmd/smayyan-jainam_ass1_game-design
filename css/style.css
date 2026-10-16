@@ -97,7 +97,8 @@ svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width:
 .legend { position: absolute; z-index: 750; right: 70px; bottom: calc(var(--tab-h) + 28px); padding: 12px 14px; font-size: 0.9rem; min-width: 210px; }
 .lg-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
 .lg-row i { width: 18px; height: 14px; border-radius: 4px; flex: none; border: 1px solid rgba(0,0,0,.4); }
-.lg-neutral { background: repeating-linear-gradient(45deg, #8A93A6 0 3px, transparent 3px 6px); }
+.lg-others { background: linear-gradient(90deg, #FF3B5C 0 33%, #FFE600 33% 66%, #B6FF00 66%); }
+.lg-close { height: 0 !important; border: 0 !important; border-top: 3px dotted var(--text) !important; border-radius: 0 !important; }
 .lg-dash { border: 2px dashed var(--text) !important; background: transparent; }
 
 /* ---------- Tab bar ---------- */
@@ -134,7 +135,6 @@ svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width:
 .me-dot { width: 34px; height: 34px; border-radius: 50%; background: radial-gradient(circle, var(--me) 0 38%, transparent 40%); position: relative; }
 .me-dot span { position: absolute; inset: 0; border-radius: 50%; border: 3px solid var(--me); animation: pulse 1.4s infinite; }
 [data-theme="sun"] .me-dot { background: radial-gradient(circle, #000 0 30%, var(--me) 32% 44%, transparent 46%); }
-.mate { width: 24px; height: 24px; border-radius: 50%; background: #B6FF00; color: #000; font-weight: 900; font-size: 12px; display: grid; place-items: center; border: 2px solid #000; }
 @keyframes pulse { from { transform: scale(.6); opacity: 1; } to { transform: scale(1.6); opacity: 0; } }
 .pop-wrap { background: none; border: 0; }
 .pop { transform: translate(-50%, -50%); font: 900 20px/1 var(--display); color: var(--me); text-shadow: 0 0 2px #000, 0 2px 0 #000, 0 0 12px var(--me); white-space: nowrap; animation: pop .95s ease-out forwards; pointer-events: none; }
@@ -373,3 +373,60 @@ img.av { object-fit: cover; padding: 0; border: 3px solid var(--me); }
 .scenario.live .sc-ico { filter: drop-shadow(0 0 6px var(--good)); }
 .sc-divider { margin: 6px 2px 0; }
 .c-weak { background: var(--warn); color: #000; border-color: transparent; }
+
+/* ---------- Location: Google-style blue dot, friends, start flag ---------- */
+.gdot { position: relative; width: 48px; height: 48px; }
+.gdot-core { position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; background: #4C8DFF; border: 3px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.25), 0 2px 6px rgba(0,0,0,.4); }
+.gdot-core::after { content: ""; position: absolute; inset: -9px; border-radius: 50%; border: 2px solid #4C8DFF; animation: pulse 2s infinite; }
+.gdot-cone { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(from -28deg, rgba(76,141,255,.55) 0 56deg, transparent 56deg); -webkit-mask: radial-gradient(circle, transparent 8px, #000 9px); mask: radial-gradient(circle, transparent 8px, #000 9px); transition: transform .3s; }
+.fdot { position: relative; width: 34px; height: 34px; border-radius: 50%; background: var(--c); border: 3px solid #fff; display: grid; place-items: center; box-shadow: 0 2px 8px rgba(0,0,0,.5); }
+.fdot b { color: #000; font-weight: 900; font-size: 14px; }
+.fdot small { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 3px; white-space: nowrap; padding: 1px 7px; border-radius: 8px; background: rgba(8,12,20,.85); color: #fff; font-weight: 800; font-size: 11.5px; }
+.fdot.rec::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; border: 3px solid var(--c); animation: pulse 1.4s infinite; }
+[data-theme="sun"] .fdot { border-color: #000; }
+[data-theme="sun"] .fdot small { background: #fff; color: #000; outline: 2px solid #000; }
+.start-flag { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: #fff; border: 2px solid #000; font-size: 16px; box-shadow: 0 2px 6px rgba(0,0,0,.5); }
+
+/* ---------- Map type picker, GPS card, zone card ---------- */
+.layers { position: absolute; z-index: 750; right: 70px; bottom: calc(var(--tab-h) + 86px); padding: 12px; }
+.layer-opts { display: flex; gap: 8px; margin-top: 8px; }
+.layer-opts button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px; border: 2px solid transparent; border-radius: 12px; background: none; font-size: 0.82rem; font-weight: 700; min-width: 64px; }
+.layer-opts button[aria-checked="true"] { border-color: var(--me); color: var(--me); }
+[data-theme="sun"] .layer-opts button[aria-checked="true"] { border-color: #000; color: #000; background: #FFF6A8; }
+.lp { width: 54px; height: 54px; border-radius: 10px; border: 1px solid var(--line); display: block; }
+.lp-sat { background: radial-gradient(circle at 30% 30%, #6b7f4a, transparent 40%), radial-gradient(circle at 70% 65%, #4d5d38, transparent 45%), linear-gradient(135deg, #8a8f73, #3e4a35); }
+.lp-map { background: linear-gradient(90deg, transparent 45%, #fff 45% 55%, transparent 55%), linear-gradient(0deg, transparent 60%, #f7d38c 60% 68%, transparent 68%), #e8eae3; }
+.lp-dark { background: linear-gradient(90deg, transparent 45%, #3a4252 45% 55%, transparent 55%), linear-gradient(0deg, transparent 60%, #2a303c 60% 68%, transparent 68%), #12161e; }
+.gps-card { position: absolute; z-index: 790; top: calc(max(12px, env(safe-area-inset-top)) + 58px); left: 12px; right: 12px; padding: 12px 14px; display: flex; gap: 10px; align-items: center; border-left: 6px solid var(--warn); }
+.gps-card p { margin: 0; flex: 1; }
+.start-gps { margin: 10px 0 4px; padding: 10px 12px; border-radius: 12px; background: var(--raise); border: var(--border); border-left: 6px solid var(--muted); }
+.start-gps.q-good { border-left-color: var(--good); }
+.start-gps.q-ok { border-left-color: var(--warn); }
+.start-gps.q-weak { border-left-color: var(--danger); }
+.start-gps small { color: var(--muted); }
+.start-friends { margin: 4px 0; color: var(--muted); }
+.zone-card { position: absolute; z-index: 880; left: 12px; right: 12px; bottom: calc(var(--tab-h) + 16px); padding: 12px 14px; animation: up .2s ease-out; }
+.zone-card p { margin: 8px 0 0; }
+.zone-card .btn { margin-top: 10px; min-height: 42px; }
+.zc-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.zc-head .icon-btn { width: 40px; height: 40px; box-shadow: none; }
+.zone-card .tag-decay { padding: 1px 6px; border-radius: 6px; font-weight: 800; }
+.rec-ctx small { font-weight: 700; opacity: .85; }
+
+/* ---------- Sign-in, friends ---------- */
+.btn-google { background: #fff; color: #1f1f1f; border: 1px solid #747775; gap: 10px; }
+.btn-google .g { width: 20px; height: 20px; stroke: none; }
+.code-card { text-align: center; margin-top: 10px; }
+.code-card .row { justify-content: center; }
+.code { font: 900 2.4rem/1.2 var(--display); letter-spacing: .18em; margin: 4px 0 12px; color: var(--me); font-variant-numeric: tabular-nums; }
+[data-theme="sun"] .code { color: #000; }
+.add-friend .row input { flex: 1; min-width: 0; text-transform: uppercase; letter-spacing: .12em; }
+.field .row input { flex: 1; min-width: 0; }
+.friend-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin-bottom: 6px; border-radius: 14px; background: var(--raise); border: var(--border); }
+.icon-btn.sm { width: 40px; height: 40px; box-shadow: none; flex: none; }
+.icon-btn.sm svg { width: 20px; height: 20px; }
+.live-tag { color: var(--good); font-weight: 800; }
+
+/* ---------- Loading / errors ---------- */
+.loading { position: absolute; inset: 0; z-index: 2000; display: grid; place-items: center; padding: 24px; background: var(--bg); font-weight: 800; color: var(--muted); text-align: center; }
+.loading .note { max-width: 360px; color: var(--text); font-weight: 400; }

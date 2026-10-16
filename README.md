@@ -2,9 +2,11 @@
 
 A mobile-first fitness game that turns real walks and rides into a territory-and-combat game, inspired by territory-capture running apps, built for **walkers and cyclists**.
 
-* **Close a loop:** claim the area inside, in your colour.
-* **Move through a rival's zone:** deal damage. At 0 HP it turns neutral, then claim it.
+* **Go on a trip:** your real GPS route is drawn on the map behind you, including campus inner roads and footpaths (nothing is snapped to main roads).
+* **End the trip:** the route is closed with a straight line back to your start and the whole shape becomes your zone. A full loop claims the loop; a semicircle claims the filled semicircle.
+* **Move through someone else's zone:** deal damage. At 0 HP it breaks, and its ground is free to claim.
 * **Damage = distance × intensity**, balanced so walkers and cyclists compete fairly.
+* **Play with friends:** add them by code and see their zones and live positions. Trip together for a combo bonus.
 * **Inactivity costs points** (−5 → −50/day cap) and makes your zones decay. A 15-minute walk, or a weekly rest token, keeps you safe.
 
 ## Deliverables
@@ -13,42 +15,34 @@ A mobile-first fitness game that turns real walks and rides into a territory-and
 |---|---|
 | Game rules with exact scoring formulas | [docs/GAME_RULES.md](docs/GAME_RULES.md) |
 | Screen list & user flow | [docs/SCREENS_AND_FLOW.md](docs/SCREENS_AND_FLOW.md) |
-| Interactive web prototype: simulated **and live** GPS, Google sign-in | `index.html` (this folder) |
-| Google sign-in & live-GPS setup | [docs/SETUP_GOOGLE.md](docs/SETUP_GOOGLE.md) |
+| Interactive web app: live GPS, satellite map, real-shape zones, friends | `index.html` (this folder) |
+| Online multiplayer setup (Firebase, free) | [docs/SETUP_FIREBASE.md](docs/SETUP_FIREBASE.md) |
 
-## Running the prototype
-
-**Quick look:** open **`index.html`** directly in Chrome, Edge, Firefox or Safari. Simulated routes work this way.
-
-**Full version (Google sign-in + real GPS):** run the tiny local server (needs Node, nothing to install):
+## Running it
 
 ```
 node serve.js        # then open http://localhost:5173
 ```
 
-1. Put your Google OAuth Client ID in [`js/config.js`](js/config.js) (see [docs/SETUP_GOOGLE.md](docs/SETUP_GOOGLE.md)). Without it, the app runs in guest mode.
-2. An internet connection is needed only for the map tiles. Everything else (including Leaflet, in `vendor/`) is local. Without internet, the territory still draws on a plain background.
-3. For the phone experience on a desktop, the app renders inside a phone-sized frame. You can also use DevTools device mode.
+Needs Node; there's nothing to install. Open it in any modern browser (Chrome, Edge, Opera GX, Firefox, Safari).
 
-Progress is saved in `localStorage`, with one save per Google account plus a guest save. **Profile → Reset prototype** starts over.
+* **Offline mode (default):** works straight away. You play single player and progress is saved on this device.
+* **Online mode:** add a free Firebase config to [`js/config.js`](js/config.js) ([docs/SETUP_FIREBASE.md](docs/SETUP_FIREBASE.md)). This turns on Google or guest sign-in, friends, shared zones, live positions and notifications.
+* **On a phone:** GPS needs `https://`. Publish with GitHub Pages (see the setup doc) and open that link. Laptops locate by Wi-Fi and are usually too rough (±50 m+) to record. For testing at a desk, use **GO → Test: draw a route and simulate it** (shown on `localhost` or with `?test` in the URL).
 
-### Real map & location
+### The map
 
-* The map is real (OpenStreetMap data, Esri basemap). By default the game board sits in a **demo city**, so the scripted test routes line up with the rival zones.
-* Choose **Where do you play? → Around me** in onboarding (or **Profile → Move board to my location**). The board, your home turf and the nearby rivals move to your real position.
-* **GO → Live GPS: go outside** records a real walk or ride with the device's GPS. Real activities go through the same recorder as the simulated ones (mode detection, anti-cheat, damage, loop claims). On a phone this needs HTTPS (e.g. GitHub Pages); see the setup doc.
+* It starts wherever you are: the browser asks for your location.
+* There are three map types (the layers button): **Satellite** (Esri World Imagery with road and place labels, sharp enough for campus paths), **Map** (OpenStreetMap, which includes campus inner roads and buildings) and **Dark**. None of them needs an API key.
+* It looks and works like Google Maps: a blue dot with an accuracy circle and heading, re-centre, pinch zoom. Tap a zone for its details.
 
-### Suggested test run (≈5 minutes)
+### A trip
 
-1. Go through onboarding and pick a name, colour and clan.
-2. **GO → Defend patrol** (×20). Watch Home Turf's HP bar refill and the loop *reinforce* it.
-3. **GO → Raid ride** (×60). Laps inside Vex's decaying zone break it (*ZONE BROKEN!*), then the outer loop claims the whole block.
-4. **GO → First claim walk.** Brisk pace plus the 1.5× uphill bonus on the park hill, and a big never-owned claim.
-5. **GO → Cheat test.** A "walk" that includes a 28 km/h car ride and an 800 m GPS jump. Watch the anti-cheat banner, the red dashed track and the excluded km in the summary.
-6. **GO → Clan walk with Mira.** Group combo ×1.2.
-7. **Profile → Time machine:** *Skip day* a few times. Watch the penalties (−5, −10, −20…), decay notifications and rival attacks. Then try *Use rest token*.
-8. Tap **☀** for sunlight mode, and check **Ranks** and **Clan**.
-9. **GO → Draw your own route:** tap waypoints anywhere and set the speed. Try 25 km/h with mode locked to *Walk*.
+1. **GO → Start trip.** Pick Auto, Walk or Cycle. The sheet shows your GPS accuracy.
+2. Walk or ride. Your trail is drawn in your colour. A dotted line runs from you back to your start 🏁, and a light fill shows the zone you'd get if you ended now.
+3. **End trip → End & claim.** The shape is saved as your zone. Rival zones with HP are cut out of it, and your own zones it touches merge into it.
+
+GPS handling: fixes worse than ±30 m are dropped. A Kalman filter smooths jitter, standing still doesn't add distance, and the screen stays awake while recording. Keep the app open in the foreground: browsers pause GPS for background tabs.
 
 ## Automated checks
 
@@ -56,7 +50,7 @@ Progress is saved in `localStorage`, with one save per Google account plus a gue
 node tests/run-scenarios.js
 ```
 
-This runs every simulated route through the real recorder (with and without the HR monitor). It checks the penalty ladder, intensity tiers, claims, zone breaking, healing, group combo, anti-cheat, decay and rest tokens.
+This checks the scoring rules and the zone geometry: semicircles filled by the closing line, loops, figure-eights, cutting around rival zones, merging, and decay. It also feeds noisy GPS into the real recorder to check distance accuracy, jitter while standing still, poor fixes, zone breaking, anti-cheat, the real-calendar penalties and rest tokens.
 
 ## Project structure
 
@@ -64,18 +58,19 @@ This runs every simulated route through the real recorder (with and without the 
 index.html            app shell (all screens)
 css/style.css         neon + sunlight themes, mobile-first layout
 js/rules.js           every scoring constant & formula (mirrors GAME_RULES.md)
-js/world.js           city grid, zones, seed data, loop claiming, day/decay cycle, leaderboards
-js/sim.js             simulated GPS routes + activity recorder (mode detection, anti-cheat, damage, loops)
-js/app.js             UI: map rendering, HUD, screens, notifications
-js/auth.js            Sign in with Google (Google Identity Services)
-js/config.js          your Google OAuth Client ID
+js/world.js           geometry, trip → zone shape, claim planning, profile, real-calendar day cycle
+js/sim.js             live GPS filter (Kalman), test-route simulator, trip recorder (mode, anti-cheat, damage)
+js/store.js           data layer: Firebase (online) or this device (offline)
+js/app.js             UI: map, location, trips, friends, ranks, profile, onboarding
+js/config.js          your Firebase web config (empty = offline mode)
+firestore.rules       database security rules (paste into Firebase)
 serve.js              zero-dependency local server (http://localhost:5173)
-tests/                headless scenario tests (Node)
+tests/                headless rule, geometry and recorder checks (Node)
 vendor/leaflet/       Leaflet 1.9.4 (BSD-2-Clause)
-docs/                 rules + screens/flow
+vendor/turf/          Turf.js 7.1.0 geometry (MIT)
+docs/                 rules, screens/flow, Firebase setup
 ```
 
 ## Credits
 
-Map data © OpenStreetMap contributors. Basemap tiles © Esri (Canvas). Map library: Leaflet.
-The city setting (Chicago, West Town) is a generic grid city for the prototype. All players other than you are fictional bots.
+Map data © OpenStreetMap contributors. Satellite imagery © Esri, Maxar, Earthstar Geographics; dark basemap © Esri. Map library: Leaflet. Geometry: Turf.js. Backend: Firebase.

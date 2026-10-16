@@ -1,4 +1,4 @@
-ss<!doctype html>
+<!doctype html>
 <html lang="en" data-theme="neon">
 <head>
   <meta charset="utf-8" />
@@ -32,9 +32,20 @@ ss<!doctype html>
       </button>
     </header>
 
+    <div class="gps-card panel" id="gps-card" hidden role="status"></div>
+
     <div class="map-tools" id="map-tools">
-      <button class="icon-btn" id="btn-locate" aria-label="Centre on home"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/><circle cx="12" cy="12" r="8"/></svg></button>
-      <button class="icon-btn" id="btn-legend" aria-label="Map legend" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg></button>
+      <button class="icon-btn" id="btn-layers" aria-label="Map type" aria-expanded="false" title="Map type"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg></button>
+      <button class="icon-btn" id="btn-legend" aria-label="Map legend" aria-expanded="false" title="Legend"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg></button>
+      <button class="icon-btn" id="btn-locate" aria-label="Show my location" title="My location"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/><circle cx="12" cy="12" r="8"/></svg></button>
+    </div>
+    <div class="layers panel" id="layers" hidden>
+      <b>Map type</b>
+      <div class="layer-opts" role="radiogroup" aria-label="Map type">
+        <button role="radio" data-style="satellite"><i class="lp lp-sat" aria-hidden="true"></i>Satellite</button>
+        <button role="radio" data-style="streets"><i class="lp lp-map" aria-hidden="true"></i>Map</button>
+        <button role="radio" data-style="dark"><i class="lp lp-dark" aria-hidden="true"></i>Dark</button>
+      </div>
     </div>
     <div class="legend panel" id="legend" hidden></div>
 
@@ -42,8 +53,8 @@ ss<!doctype html>
     <nav class="tabbar" id="tabbar" role="tablist" aria-label="Main">
       <button role="tab" data-tab="map" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/></svg><span>Map</span></button>
       <button role="tab" data-tab="ranks" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0z"/><path d="M7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4"/></svg><span>Ranks</span></button>
-      <button class="fab" id="btn-start" aria-label="Start activity"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg><span>GO</span></button>
-      <button role="tab" data-tab="clan" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><circle cx="17" cy="9" r="2.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M15 20a4.5 4.5 0 0 1 7-3.7"/></svg><span>Clan</span></button>
+      <button class="fab" id="btn-start" aria-label="Start a trip"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg><span>GO</span></button>
+      <button role="tab" data-tab="friends" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><circle cx="17" cy="9" r="2.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M15 20a4.5 4.5 0 0 1 7-3.7"/></svg><span>Friends</span></button>
       <button role="tab" data-tab="profile" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><span>Profile</span></button>
     </nav>
 
@@ -51,11 +62,11 @@ ss<!doctype html>
     <section class="sheet" id="sheet-start" hidden aria-labelledby="start-title">
       <div class="sheet-grip" aria-hidden="true"></div>
       <div class="sheet-head">
-        <h2 id="start-title">Start an activity</h2>
+        <h2 id="start-title">Start a trip</h2>
         <button class="icon-btn" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
-      <p class="muted small">Prototype: pick a simulated GPS route. No need to go outside.</p>
-      <div class="scenario-list" id="scenario-list"></div>
+      <p class="muted small">Your route is drawn behind you. Tap <b>End</b> when you're done: the app joins your end point back to your start and the whole shape becomes your zone.</p>
+      <div class="start-gps" id="start-gps"></div>
       <div class="opt-row">
         <span class="opt-label" id="lbl-mode">Mode</span>
         <div class="seg" role="radiogroup" aria-labelledby="lbl-mode" id="opt-mode">
@@ -63,34 +74,23 @@ ss<!doctype html>
         </div>
       </div>
       <p class="hint small" id="mode-hint"></p>
-      <div class="opt-row">
-        <span class="opt-label" id="lbl-group">Moving with</span>
-        <div class="seg" role="radiogroup" aria-labelledby="lbl-group" id="opt-group">
-          <button role="radio" data-v="1">Solo</button><button role="radio" data-v="2">+1 mate</button><button role="radio" data-v="3">+2 mates</button>
-        </div>
-      </div>
-      <div class="opt-row">
-        <span class="opt-label" id="lbl-speed">Sim speed</span>
-        <div class="seg" role="radiogroup" aria-labelledby="lbl-speed" id="opt-speed">
-          <button role="radio" data-v="5">×5</button><button role="radio" data-v="20">×20</button><button role="radio" data-v="60">×60</button>
-        </div>
-      </div>
-      <label class="switch-row"><span>Heart-rate monitor (simulated)</span><input type="checkbox" id="opt-hr" /><i aria-hidden="true"></i></label>
-      <button class="btn btn-primary btn-block" id="btn-go">Start</button>
+      <p class="small start-friends" id="start-friends"></p>
+      <button class="btn btn-primary btn-block" id="btn-go">Start trip</button>
+      <button class="btn btn-block" id="btn-test" hidden>✏️ Test: draw a route and simulate it</button>
     </section>
 
-    <!-- ===== Draw-your-route bar ===== -->
+    <!-- ===== Draw-a-test-route bar ===== -->
     <section class="drawbar panel" id="drawbar" hidden>
       <b>Tap the map to add waypoints</b>
-      <p class="small muted"><span id="draw-count">0</span> points · <span id="draw-km">0.00</span> km</p>
+      <p class="small muted"><span id="draw-count">0</span> points · <span id="draw-km">0.00</span> km · simulated GPS, for testing at your desk</p>
       <div class="opt-row">
-        <label for="draw-speed" class="opt-label">Speed <b id="draw-speed-v">5.5</b> km/h</label>
-        <input type="range" id="draw-speed" min="3" max="40" step="0.5" value="5.5" />
+        <label for="draw-speed" class="opt-label">Speed <b id="draw-speed-v">15</b> km/h</label>
+        <input type="range" id="draw-speed" min="3" max="40" step="0.5" value="15" />
       </div>
       <div class="row gap">
         <button class="btn" id="draw-undo">Undo</button>
         <button class="btn" id="draw-cancel">Cancel</button>
-        <button class="btn btn-primary" id="draw-go" disabled>Ride it</button>
+        <button class="btn btn-primary" id="draw-go" disabled>Simulate</button>
       </div>
     </section>
 
@@ -109,7 +109,7 @@ ss<!doctype html>
           <div><span class="lbl">Distance</span><b id="r-dist">0.00</b><small>km</small></div>
           <div><span class="lbl">Time</span><b id="r-time">0:00</b></div>
           <div><span class="lbl">Speed</span><b id="r-speed">0.0</b><small>km/h</small></div>
-          <div><span class="lbl">Points</span><b id="r-points">0</b></div>
+          <div><span class="lbl">Zone now</span><b id="r-area">0</b><small id="r-area-u">m²</small></div>
         </div>
         <div class="rec-chips" id="r-chips"></div>
         <div class="daily-bar" aria-label="Daily minimum"><i id="r-daily-fill"></i><span id="r-daily-txt">Daily minimum 0%</span></div>
@@ -117,15 +117,29 @@ ss<!doctype html>
       <div class="rec-banner" id="rec-banner" aria-live="assertive"></div>
       <div class="rec-bottom">
         <button class="btn btn-round" id="r-pause" aria-label="Pause">❚❚</button>
-        <button class="btn" id="r-speedbtn" aria-label="Change simulation speed">×20</button>
-        <button class="btn btn-danger" id="r-finish">Finish</button>
+        <button class="btn btn-round" id="r-center" aria-label="Follow my position" title="Follow me"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l7 19-7-4-7 4z"/></svg></button>
+        <button class="btn btn-danger" id="r-finish">End trip</button>
       </div>
     </section>
+
+    <!-- ===== End-trip confirmation ===== -->
+    <section class="sheet" id="sheet-end" hidden aria-labelledby="end-title">
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <h2 id="end-title">End trip?</h2>
+      <p id="end-text"></p>
+      <div class="row gap">
+        <button class="btn btn-block" id="end-keep">Keep going</button>
+        <button class="btn btn-primary btn-block" id="end-ok">End &amp; claim</button>
+      </div>
+    </section>
+
+    <!-- ===== Zone info card ===== -->
+    <section class="zone-card panel" id="zone-card" hidden aria-live="polite"></section>
 
     <!-- ===== Full screens ===== -->
     <section class="screen" id="screen-summary" hidden aria-labelledby="sum-title"></section>
     <section class="screen" id="screen-ranks" hidden aria-labelledby="ranks-title"></section>
-    <section class="screen" id="screen-clan" hidden aria-labelledby="clan-title"></section>
+    <section class="screen" id="screen-friends" hidden aria-labelledby="friends-title"></section>
     <section class="screen" id="screen-profile" hidden aria-labelledby="prof-title"></section>
     <section class="screen" id="screen-onboarding" hidden aria-label="Welcome"></section>
 
@@ -139,14 +153,16 @@ ss<!doctype html>
     </section>
 
     <div class="toasts" id="toasts" aria-live="polite"></div>
+    <div class="loading" id="loading">Loading PedalPace…</div>
   </div>
 
   <script src="vendor/leaflet/leaflet.js"></script>
+  <script src="vendor/turf/turf.min.js"></script>
   <script src="js/rules.js"></script>
   <script src="js/world.js"></script>
   <script src="js/sim.js"></script>
   <script src="js/config.js"></script>
-  <script src="js/auth.js"></script>
+  <script src="js/store.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

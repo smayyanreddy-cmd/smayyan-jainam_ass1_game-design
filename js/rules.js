@@ -31,13 +31,15 @@
     STREAK_MAX: 0.20,              // capped at +20% (10 days)
     DEFEND_MULT: 1.25,             // moving through your/clan's *damaged* zone
     GROUP_MULT: { 1: 1.0, 2: 1.2, 3: 1.35, 4: 1.5 }, // 4+ uses 4
-    CLAIM_VIRGIN_PTS: 5,           // per never-owned cell claimed
-    CLAIM_NEUTRAL_PTS: 3,          // per neutral (previously owned) cell claimed
+    CLAIM_PTS_PER_1000M2: 2,       // per 1,000 m² of new ground claimed
     NEUTRALISE_PTS: 50,            // per enemy zone you knock to 0 HP
 
     // ---- Territory ----
     ZONE_HP_BASE: 40,
-    ZONE_HP_PER_CELL: 6,
+    ZONE_HP_PER_1000M2: 1.5,
+    MIN_ZONE_M2: 500,              // smaller claims (e.g. an out-and-back ride) don't make a zone
+    MIN_PART_M2: 50,               // slivers left after cutting around rival zones are dropped
+    MAX_FLAGGED_SHARE: 0.2,        // more than 20 % of the trip flagged by anti-cheat -> no zone
     DECAY_START_DAY: 2,            // owner inactive this many days -> zone starts decaying
     DECAY_PCT: 0.10,               // 10% of max HP per day
     DECAY_PCT_SEVERE: 0.20,        // from SEVERE_DAY inactive days
@@ -55,13 +57,19 @@
     WALK_MAX_KMH: 10,              // sustained above this while "walking" -> flagged
     CYCLE_MAX_KMH: 45,             // sustained above this -> car-speed segment
     CHEAT_SUSTAIN_SEC: 8,
-    GPS_JUMP_M: 80,                // > 80 m between 1 Hz fixes (~290 km/h) -> GPS jump
+    GPS_JUMP_M: 80,                // > 80 m between fixes...
+    GPS_JUMP_MPS: 40,              // ...at over 40 m/s (144 km/h) -> GPS jump
+    GPS_MAX_ACC_M: 30,             // fixes less accurate than ±30 m are not recorded
     AUTO_WALK_BELOW_KMH: 7.5,
     AUTO_CYCLE_ABOVE_KMH: 9.5,
 
-    // ---- Loops ----
-    LOOP_CLOSE_M: 25,
-    LOOP_MIN_PATH_M: 250,
+    // ---- Trips ----
+    NEAR_START_M: 30,              // "back at the start" hint radius...
+    NEAR_START_MIN_PATH_M: 250,    // ...once you've travelled at least this far
+
+    // ---- Multiplayer ----
+    GROUP_RADIUS_M: 60,            // friends recording within 60 m count towards the combo
+    LIVE_FRESH_SEC: 30,            // a friend's live position older than this is ignored
   };
 
   /** HR zone 1..5 from bpm (percent of max HR: <60, 60-70, 70-80, 80-90, 90+). */
@@ -124,8 +132,13 @@
     return damage * (ownerInactiveDays >= R.DECAY_START_DAY ? R.VULNERABLE_MULT : 1);
   };
 
-  R.zoneMaxHp = function (cells) {
-    return R.ZONE_HP_BASE + R.ZONE_HP_PER_CELL * cells;
+  R.zoneMaxHp = function (areaM2) {
+    return Math.round(R.ZONE_HP_BASE + R.ZONE_HP_PER_1000M2 * areaM2 / 1000);
+  };
+
+  /** Bonus points for claiming new ground. */
+  R.claimPoints = function (newAreaM2) {
+    return Math.round(R.CLAIM_PTS_PER_1000M2 * Math.max(0, newAreaM2) / 1000);
   };
 
   /** Penalty for the n-th consecutive missed day (n >= 1). */
@@ -139,6 +152,13 @@
     if (ownerInactiveDays < R.DECAY_START_DAY) return 0;
     const pct = ownerInactiveDays >= R.DECAY_SEVERE_DAY ? R.DECAY_PCT_SEVERE : R.DECAY_PCT;
     return Math.round(maxHp * pct);
+  };
+
+  /** Total HP lost to decay after this many inactive days. */
+  R.decayTotal = function (maxHp, ownerInactiveDays) {
+    let t = 0;
+    for (let d = R.DECAY_START_DAY; d <= ownerInactiveDays; d++) t += R.decayAmount(maxHp, d);
+    return t;
   };
 
   /** Daily minimum progress, 0..1+ (walk minutes and cycle km combine). */

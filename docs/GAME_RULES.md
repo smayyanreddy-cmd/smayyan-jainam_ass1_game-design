@@ -1,8 +1,8 @@
 # PedalPace: Game Rules
 
-*Working title. Version 1.0 of the rules, matching the prototype in this repo.*
+*Working title. Version 2.0 of the rules (real GPS, real-shape zones, multiplayer), matching the prototype in this repo.*
 
-PedalPace turns real walks and rides into a territory game. Your GPS route is drawn on the real map. **Close a loop** to claim the area inside. **Move through a rival's area** to damage it. Break it to 0 HP and it turns neutral, ready to be claimed.
+PedalPace turns real walks and rides into a territory game. Your GPS route is drawn on the real map behind you. **End the trip** and the route is closed with a straight line back to your start: the whole shape becomes your zone. **Move through another player's zone** to damage it. Break it to 0 HP and its ground is free to claim.
 
 Every number below is defined once in [`js/rules.js`](../js/rules.js). The prototype and this document use the same values.
 
@@ -12,12 +12,11 @@ Every number below is defined once in [`js/rules.js`](../js/rules.js). The proto
 
 | Term | Meaning |
 |---|---|
-| **Cell** | The smallest unit of territory: a 66 m × 66 m square (≈ 0.0044 km²) on a fixed city grid. |
-| **Zone** | A group of cells claimed together by one loop. Zones have an owner, a name and a health bar (HP). |
-| **Neutral cell** | A cell that used to be owned, but its zone was broken (by damage or decay). Anyone can claim it. |
-| **Never-owned cell** | A cell nobody has ever claimed. Claiming one gives the biggest claim bonus. |
-| **Friendly zone** | A zone owned by you or a clan mate. |
-| **Enemy zone** | A zone owned by anyone else. |
+| **Trip** | One recorded walk or ride, from *Start trip* to *End trip*. |
+| **Zone** | The area one trip enclosed, in its exact shape. Zones have an owner, a name and a health bar (HP). |
+| **Free ground** | Any ground not inside a standing zone: never claimed, or the zone there was broken. |
+| **Your zone** | A zone you own. Moving through it heals it. |
+| **Rival zone** | A zone owned by anyone else, friends included. Moving through it damages it. |
 
 ---
 
@@ -81,34 +80,39 @@ Walking gets intensity tiers and cycling gets a low base, so a brisk walker and 
 
 | Where you are | Effect on the zone | Points |
 |---|---|---|
-| Enemy zone | Zone loses `D` HP (**× 1.25** if its owner has been inactive ≥ 2 days: *vulnerable*) | `D` |
-| Friendly zone below max HP | Zone **heals** by `D` HP (up to max) | `D` (includes the ×1.25 defend bonus) |
-| Friendly zone at full HP | None (patrolling) | `D` |
-| Neutral / never-owned ground | None | `D` |
+| Rival zone | Zone loses `D` HP (**× 1.25** if its owner has been inactive ≥ 2 days: *vulnerable*) | `D` |
+| Your zone below max HP | Zone **heals** by `D` HP (up to max) | `D` (includes the ×1.25 defend bonus) |
+| Your zone at full HP | None (patrolling) | `D` |
+| Free ground | None | `D` |
 
-**Zone HP:** `maxHP = 40 + 6 × cells`. A 49-cell (≈0.21 km²) zone has 334 HP.
+**Zone HP:** `maxHP = 40 + 1.5 × area / 1,000 m²`. A 20,000 m² zone has 70 HP; a 0.2 km² zone has 340 HP.
 
-When an enemy zone hits **0 HP** it **breaks**: all its cells become neutral and you get **+50 points**.
+When a rival zone hits **0 HP** it **breaks**: it disappears, its ground is free, and you get **+50 points**. Damage is applied live, so the owner sees their HP bar drop while you ride.
 
-### 2.5 Claiming (closing a loop)
+### 2.5 Claiming (ending a trip)
 
-* A loop closes when your current position comes within **25 m** of a point you passed at least **250 m** of travel earlier (in this activity, since your last loop).
-* Everything the loop encloses is captured. Odd shapes, figure-eights and laps all work. The loop must enclose at least 2 interior cells.
-* What happens to each enclosed cell:
+* Tap **End trip**. The app joins your **end point back to your start point with a straight line** and fills the shape.
+  * Come back to where you started and you claim the exact loop you rode.
+  * Ride an open arc (e.g. a semicircle) and the gap is closed with a straight line, so you claim the filled semicircle.
+  * Figure-eights and laps work: every enclosed lobe is claimed.
+* While recording, the map shows a dotted line from you back to your start 🏁 and a light fill of the zone you'd get if you ended now. When you're back within **30 m** of your start (after at least **250 m**), the app tells you so.
+* What happens to the enclosed ground:
 
-| Cell | Result | Bonus |
+| Ground | Result | Bonus |
 |---|---|---|
-| Never-owned | Becomes yours | **+5 pts / cell** |
-| Neutral | Becomes yours | **+3 pts / cell** |
-| Friendly | That zone is restored to full HP (*reinforced*) | — |
-| Enemy (HP > 0) | **Protected**, can't be claimed. Break the zone first. | — |
+| Free ground | Becomes yours | **+2 pts per 1,000 m²** |
+| Ground of a rival zone broken by decay | Becomes yours (the old zone is removed) | **+2 pts per 1,000 m²** |
+| Your own zone it touches | Merged into the new zone, which starts at full HP (*reinforced*) | none for ground you already held |
+| Rival zone with HP > 0 | **Protected**: the new zone is cut around it. Break it first. | none |
 
-* Newly claimed cells form a new zone at full HP.
+* A claim smaller than **500 m²** doesn't make a zone (an out-and-back ride along one road encloses almost nothing). Damage and points still count.
+* Slivers under 50 m² left over after cutting around rival zones are dropped.
+* GPS is never snapped to roads: inner campus roads and footpaths count exactly as ridden.
 
 ### 2.6 Total points for an activity
 
 ```
-Points = Σ D  +  claim bonuses  +  50 × zones broken
+Points = Σ D  +  claim bonus  +  50 × zones broken
 ```
 
 ---
@@ -145,9 +149,11 @@ P(n) = min(50, 5 × 2^(n−1))
 * Total points never go below 0.
 * **The penalty is never harsher than this.** There is no extra punishment, and no bonus for doing more than one activity per day, beyond normal damage.
 
+Days are real calendar days in your own timezone. The overnight rules are applied the next time you open the app, for every day you missed.
+
 ### 3.3 Rest tokens
 
-* **1 rest token per week** (refilled every 7 days, no carry-over).
+* **1 rest token per week** (refilled every Monday, no carry-over). Use it from **Profile → Today**.
 * Using one on an inactive day means **no penalty** and **streak kept**. Your missed-day and inactive-day counters don't advance, so decay doesn't get worse.
 * This exists so recovery days aren't punished. Rest is part of training.
 
@@ -161,20 +167,21 @@ Zones whose owner has been inactive lose HP every night:
 | 2 to 4 days | −10 % of max HP |
 | 5+ days | −20 % of max HP |
 
-Decaying zones also take **×1.25 damage** from attackers (§2.4). A zone that decays to 0 HP becomes neutral.
+Decaying zones also take **×1.25 damage** from attackers (§2.4). A zone that decays to 0 HP is gone and its ground is free. Your next trip (or rest token) stops the decay; HP already lost stays lost until you heal it.
 
 ---
 
 ## 4. Anti-cheat
 
-The recorder checks every 1 Hz GPS fix. Flagged distance earns **no damage, no daily-minimum credit, and can't be part of a claim loop**. The loop restarts after a flagged segment.
+The recorder checks every 1 Hz GPS fix. Flagged distance earns **no damage and no daily-minimum credit**, and flagged points are left out of the zone shape. If more than **20 %** of a trip's distance is flagged, the trip makes **no zone**.
 
 | Check | Rule | Example |
 |---|---|---|
-| **GPS jump** | > 80 m between consecutive 1-second fixes (≈ 290 km/h) | Teleport across town: the segment is ignored |
+| **GPS jump** | > 80 m between fixes *and* faster than 40 m/s (144 km/h) | Teleport across town: the segment is ignored |
 | **Mode mismatch** | Mode is *walking* and the 5-second smoothed speed is > 10 km/h | "Walking" at 25 km/h |
 | **Car-speed segment** | Smoothed speed is > 45 km/h in any mode | Riding in a car or bus |
-| **Poor GPS fix** (live GPS) | Fixes with accuracy worse than ±35 m are dropped before scoring | Indoors, or between tall buildings |
+| **Poor GPS fix** | Fixes with accuracy worse than ±30 m are dropped before scoring | Indoors, or between tall buildings |
+| **GPS jitter** | A Kalman filter weighs every fix by its accuracy, and moves smaller than the GPS noise are held | Standing still doesn't add distance |
 | **Altitude glitch** | A measured grade steeper than 25 % is treated as flat | GPS altitude jumping, so there's no fake uphill bonus |
 
 * Damage stops on the **first** over-limit sample. A visible flag ("Anti-cheat: …") appears once the speed has been over the limit for **8 s**, so a GPS spike doesn't trigger a warning.
@@ -187,12 +194,13 @@ The recorder checks every 1 Hz GPS fix. Flagged distance earns **no damage, no d
 
 ---
 
-## 5. Clans
+## 5. Friends & multiplayer
 
-* Clan mates' zones are **friendly**. Moving through them heals them (with the ×1.25 defend bonus) instead of damaging them.
-* Loops that enclose a clan mate's zone reinforce it to full HP.
-* Moving together gives the **group combo** `G` (×1.2 / ×1.35 / ×1.5).
-* Clan leaderboards add up members' points, weekly damage and territory.
+* Every player has a 6-character **friend code** (and an invite link). Adding a friend is mutual.
+* Everyone's zones near you are on the map. Friends are still **rivals**: moving through their zones damages them, and theirs damages yours.
+* While you're on a trip, your live position is shared with your friends (only while recording).
+* **Go together:** each friend who is also on a trip within **60 m** of you adds the **group combo** `G` (2 players ×1.2, 3 ×1.35, 4+ ×1.5).
+* When you damage or break someone's zone, they get a notification.
 
 ---
 
@@ -200,11 +208,10 @@ The recorder checks every 1 Hz GPS fix. Flagged distance earns **no damage, no d
 
 | Board | Ranked by |
 |---|---|
-| Friends | Total points among people you follow |
-| City | Total points, all players in the city |
-| Weekly damage | Damage dealt since the weekly reset (every 7 days) |
-| Biggest territory | km² currently held |
-| Clans | Combined clan points |
+| Friends | Total points, you and your friends |
+| Weekly damage | Damage dealt since Monday, you and your friends |
+| Territory | Area currently held, you and your friends |
+| Everyone | Total points, top 50 players |
 
 **Profile stats:** total points, damage dealt, points lost to inactivity, current and best streak, territory (km²), rest tokens, badges.
 
@@ -212,11 +219,11 @@ The recorder checks every 1 Hz GPS fix. Flagged distance earns **no damage, no d
 
 | Badge | Unlock |
 |---|---|
-| 🚩 Flag Planter | Claim your first area |
-| ⚔️ Raider | Break an enemy zone |
+| 🚩 Flag Planter | Claim your first zone |
+| ⚔️ Raider | Break a rival zone |
 | 🛡️ Defender | Heal a damaged zone |
-| 🧭 Explorer | Claim 50 never-owned cells in total |
-| 👥 Squad Goals | Finish a group activity |
+| 🧭 Explorer | Claim 0.05 km² (50,000 m²) in total |
+| 👥 Squad Goals | Finish a trip with a friend nearby |
 | ✅ Fair Play | Finish an activity with no anti-cheat flags |
 | 🔥 On a Roll | 3-day streak |
 | 🏆 Week Warrior | 7-day streak |
@@ -228,11 +235,12 @@ The recorder checks every 1 Hz GPS fix. Flagged distance earns **no damage, no d
 
 | Trigger | Message |
 |---|---|
-| A rival damages your zone | "Your territory is under attack! Kai hit Home Turf for 42 HP." |
-| You've been inactive ≥ 2 days | "Your zones are decaying (−67 HP overnight). A 15-min walk or 5 km ride stops it." |
-| A zone of yours hits 0 HP | "You lost Turf #2. It is now neutral and anyone can claim it." |
+| Someone damages your zone | "Mira hit your zone Turf #2 for 42 HP. Ride through it to heal it." |
+| Someone breaks your zone | "Mira broke your zone Turf #2! Its ground is free to claim." |
+| A zone of yours decays to 0 HP | "You lost Turf #2 to decay." |
+| Someone adds you | "Mira added you as a friend." |
 | Each morning | "Keep your 3-day streak 🔥 15 min walking or 5 km cycling today." |
-| Missed day | "Missed day: −10 pts. Tomorrow's penalty would be −20." |
+| Missed day(s) | "Missed 1 day: −10 pts. Next missed day costs −20." |
 
 ---
 
