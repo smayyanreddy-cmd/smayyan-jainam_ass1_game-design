@@ -190,12 +190,16 @@
     return [lat, lng];
   }
 
-  /** Drop slivers and round coordinates (≈10 cm) so shapes stay small to store. */
+  /** Drop tiny pieces and thin slivers, and round coordinates (≈10 cm) so shapes stay small to store. */
   function tidy(f) {
     if (!f) return null;
     const g = f.geometry;
     let polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
-    polys = polys.filter((c) => T.area(T.polygon(c)) >= R.MIN_PART_M2);
+    polys = polys.filter((c) => {
+      const part = T.polygon(c);
+      if (T.area(part) < R.MIN_PART_M2) return false;
+      try { return !!T.buffer(part, -R.SLIVER_M, { units: 'meters' }); } catch (e) { return true; }
+    });
     if (!polys.length) return null;
     const out = polys.length === 1 ? T.polygon(polys[0]) : T.multiPolygon(polys);
     return T.truncate(out, { precision: 6, mutate: true });
@@ -226,37 +230,47 @@
   }
 
   /**
-   * Work out what ending a trip claims.
-   * - Rival zones with HP left are protected: the new zone is cut around them.
-   * - Rival zones broken by decay are free ground and get removed.
+   * Work out what ending a trip claims. The newest claim wins:
+   * - Any part of another player's zone inside your shape becomes yours; their
+   *   zone shrinks to what's left (or is removed if too little is left).
+   * - Zones broken by decay are free ground and get removed.
    * - Your own zones that touch the new one merge into it (back to full HP).
-   * @returns {{ shape, areaM2, newAreaM2, protectedNames, merged, dead, reason }}
+   * @returns {{ shape, areaM2, newAreaM2, taken: [{ zone, rest, takenM2 }], merged, dead, reason }}
    */
   function planClaim(zones, pts, me, today) {
-    const res = { shape: null, areaM2: 0, newAreaM2: 0, protectedNames: [], merged: [], dead: [], reason: '' };
+    const res = { shape: null, areaM2: 0, newAreaM2: 0, taken: [], merged: [], dead: [], reason: '' };
     let shape = tripShape(pts);
     if (!shape || T.area(shape) < R.MIN_ZONE_M2) { res.reason = 'small'; return res; }
-    const box = () => T.bbox(shape);
+    const box = T.bbox(shape);
     for (const z of zones) {
-      if (z.owner === me || !bboxOverlap(box(), z.bbox)) continue;
+      if (z.owner === me || !bboxOverlap(box, z.bbox)) continue;
       if (!T.booleanIntersects(shape, feature(z))) continue;
       if (effHp(z, today) <= 0) { res.dead.push(z); continue; }
-      shape = tidy(T.difference(T.featureCollection([shape, feature(z)])));
-      res.protectedNames.push(z.name);
-      if (!shape) { res.reason = 'blocked'; return res; }
+      const before = T.area(feature(z));
+      const rest = tidy(T.difference(T.featureCollection([feature(z), shape])));
+      const kept = rest ? T.area(rest) : 0;
+      if (before - kept < 1) continue;
+      res.taken.push({ zone: z, rest: kept >= R.MIN_ZONE_M2 ? rest : null, takenM2: before - kept });
     }
     let ownArea = 0;
     for (const z of zones) {
-      if (z.owner !== me || !bboxOverlap(box(), z.bbox)) continue;
+      if (z.owner !== me || !bboxOverlap(T.bbox(shape), z.bbox)) continue;
       if (!T.booleanIntersects(shape, feature(z))) continue;
       shape = tidy(T.union(T.featureCollection([shape, feature(z)])));
       res.merged.push(z); ownArea += T.area(feature(z));
     }
     res.areaM2 = T.area(shape);
     res.newAreaM2 = Math.max(0, res.areaM2 - ownArea);
-    if (res.newAreaM2 < R.MIN_ZONE_M2 && !res.merged.length) { res.reason = res.protectedNames.length ? 'blocked' : 'small'; return res; }
+    if (res.newAreaM2 < R.MIN_ZONE_M2 && !res.merged.length) { res.reason = 'small'; return res; }
     res.shape = shape;
     return res;
+  }
+
+  /** New geometry and HP for a zone that lost ground to someone else's claim (HP scales with area). */
+  function shrinkPatch(z, rest) {
+    const areaM2 = T.area(rest), maxHp = R.zoneMaxHp(areaM2);
+    const [clat, clng] = labelPoint(rest.geometry);
+    return { geo: rest.geometry, areaM2: Math.round(areaM2), maxHp, hp: Math.min(z.hp, z.hp * maxHp / z.maxHp), clat, clng, bbox: T.bbox(rest) };
   }
 
   /** Build the zone record for a claimed shape. */
@@ -277,7 +291,7 @@
   window.World = {
     Geo, COLORS, PLAYER_COLORS, BADGES, colorHex,
     dayIndex, weekIndex, newProfile, newCode, tickDays, addDailyProgress, useRestToken,
-    ownerInactiveDays, effHp, isDecaying, zoneAt, labelPoint, tripShape, planClaim, makeZone,
+    ownerInactiveDays, effHp, isDecaying, zoneAt, labelPoint, tripShape, planClaim, shrinkPatch, makeZone,
     areaKm2, fmtArea,
   };
 })();

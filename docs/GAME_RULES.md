@@ -2,7 +2,7 @@
 
 *Working title. Version 2.0 of the rules (real GPS, real-shape zones, multiplayer), matching the prototype in this repo.*
 
-PedalPace turns real walks and rides into a territory game. Your GPS route is drawn on the real map behind you. **End the trip** and the route is closed with a straight line back to your start: the whole shape becomes your zone. **Move through another player's zone** to damage it. Break it to 0 HP and its ground is free to claim.
+PedalPace turns real walks and rides into a territory game. Your GPS route is drawn on the real map behind you. **End the trip** and the route is closed with a straight line back to your start: the whole shape becomes your zone. **Move through another player's zone** to damage it. Break it to 0 HP, or simply loop around it: the newest claim always wins the ground inside it.
 
 Every number below is defined once in [`js/rules.js`](../js/rules.js). The prototype and this document use the same values.
 
@@ -101,12 +101,13 @@ When a rival zone hits **0 HP** it **breaks**: it disappears, its ground is free
 | Ground | Result | Bonus |
 |---|---|---|
 | Free ground | Becomes yours | **+2 pts per 1,000 m²** |
-| Ground of a rival zone broken by decay | Becomes yours (the old zone is removed) | **+2 pts per 1,000 m²** |
+| Part of another player's zone | **Becomes yours: the newest claim wins.** Their zone shrinks to what's left, and its HP shrinks with its area. If less than 500 m² is left, their zone is removed. | **+2 pts per 1,000 m²** |
+| Ground of a zone broken by decay | Becomes yours (the old zone is removed) | **+2 pts per 1,000 m²** |
 | Your own zone it touches | Merged into the new zone, which starts at full HP (*reinforced*) | none for ground you already held |
-| Rival zone with HP > 0 | **Protected**: the new zone is cut around it. Break it first. | none |
 
 * A claim smaller than **500 m²** doesn't make a zone (an out-and-back ride along one road encloses almost nothing). Damage and points still count.
-* Slivers under 50 m² left over after cutting around rival zones are dropped.
+* Leftover pieces under 50 m², and thin strips narrower than about 8 m (GPS wobble when two players ride the same edge), are dropped.
+* The owner of a zone you take ground from gets a notification and can take it back with a loop of their own.
 * GPS is never snapped to roads: inner campus roads and footpaths count exactly as ridden.
 
 ### 2.6 Total points for an activity

@@ -28,15 +28,19 @@ service cloud.firestore {
       }
     }
 
-    // Zones: owners create and edit their own. Anyone may only lower a zone's HP
-    // (damage), and may delete a zone once it is at 0 HP (broken).
+    // Zones: owners create and edit their own. Other players may only lower a
+    // zone's HP (damage), shrink it (their newer claim took part of it), and
+    // delete it once it is at 0 HP (broken or fully taken over).
     match /zones/{id} {
       allow read: if signedIn();
       allow create: if signedIn() && request.resource.data.owner == request.auth.uid;
       allow update: if signedIn() && (
         (resource.data.owner == request.auth.uid && request.resource.data.owner == request.auth.uid)
         || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hp', 'updated'])
-            && request.resource.data.hp < resource.data.hp));
+            && request.resource.data.hp < resource.data.hp)
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['geo', 'areaM2', 'maxHp', 'hp', 'clat', 'clng', 'bbox', 'updated'])
+            && request.resource.data.areaM2 < resource.data.areaM2
+            && request.resource.data.hp <= resource.data.hp));
       allow delete: if signedIn() && (resource.data.owner == request.auth.uid || resource.data.hp <= 0);
     }
 

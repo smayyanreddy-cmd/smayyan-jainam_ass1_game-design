@@ -695,7 +695,7 @@
     if (r.samples.length < 2) txt = 'Nothing has been recorded yet.';
     else if (flagged > R.MAX_FLAGGED_SHARE) txt = `${Math.round(flagged * 100)}% of this trip was flagged by anti-cheat, so it won’t make a zone. Damage from the clean parts still counts.`;
     else if (a < R.MIN_ZONE_M2) txt = `Joining your end point to your start encloses less than ${fmt(R.MIN_ZONE_M2)} m², so no zone this time. Your damage and points still count.`;
-    else txt = `Your route will be closed with a straight line back to your start 🏁 and filled in: about <b>${areaParts(a).join(' ')}</b>. Rival zones that still have HP are cut out of it.`;
+    else txt = `Your route will be closed with a straight line back to your start 🏁 and filled in: about <b>${areaParts(a).join(' ')}</b>. Any part of other players’ zones inside it becomes yours.`;
     $('#end-text').innerHTML = txt;
     $('#sheet-end').hidden = false;
   }
@@ -720,12 +720,19 @@
     }
     const t = W.dayIndex();
     const flagged = r.dist ? r.flaggedDist / r.dist : 0;
-    const plan = flagged > R.MAX_FLAGGED_SHARE ? { shape: null, reason: 'flagged', protectedNames: [], merged: [], dead: [], newAreaM2: 0 }
+    const plan = flagged > R.MAX_FLAGGED_SHARE ? { shape: null, reason: 'flagged', taken: [], merged: [], dead: [], newAreaM2: 0 }
       : W.planClaim(zoneList(), r.track, user.uid, t);
     let zone = null, claimPts = 0;
     if (plan.shape) {
       try {
         for (const z of plan.dead) { brokenIds.add(z.id); zones.delete(z.id); await Store.breakZone(z.id); }
+        // Newest claim wins: shrink other players' zones (or remove them if too little is left).
+        for (const t of plan.taken) {
+          if (!t.rest) { brokenIds.add(t.zone.id); zones.delete(t.zone.id); await Store.breakZone(t.zone.id); continue; }
+          const patch = W.shrinkPatch(t.zone, t.rest);
+          const cur = zones.get(t.zone.id); if (cur) Object.assign(cur, patch);
+          await Store.updateZone(t.zone.id, patch);
+        }
         for (const z of plan.merged) { brokenIds.add(z.id); zones.delete(z.id); await Store.deleteZone(z.id); }
         st.zonesMade = (st.zonesMade || 0) + (plan.merged.length ? 0 : 1);
         const name = plan.merged.length ? plan.merged[0].name : `Turf #${st.zonesMade}`;
@@ -739,7 +746,12 @@
         if (h.owner === user.uid) continue;
         Store.sendNotif(h.owner, { type: 'attack', text: h.broken ? `${P.name} broke your zone ${h.name}! Its ground is free to claim.` : `${P.name} hit your zone ${h.name} for ${fmt(h.hp)} HP. Ride through it to heal it.` }).catch(() => {});
       }
-      for (const z of plan.dead || []) Store.sendNotif(z.owner, { type: 'decay', text: `${z.name} decayed away and ${P.name} claimed the ground.` }).catch(() => {});
+      if (zone) {
+        for (const z of plan.dead) Store.sendNotif(z.owner, { type: 'decay', text: `${z.name} decayed away and ${P.name} claimed the ground.` }).catch(() => {});
+        for (const t of plan.taken) Store.sendNotif(t.zone.owner, { type: 'attack', text: t.rest
+          ? `${P.name} took ${areaParts(t.takenM2).join(' ')} of your zone ${t.zone.name}. Ride a loop around it to take it back!`
+          : `${P.name} took over your whole zone ${t.zone.name}! Ride a loop around it to take it back.` }).catch(() => {});
+      }
     }
 
     const pts = r.totalPoints(claimPts);
@@ -800,7 +812,7 @@
       pen = { label: 'Penalty at risk', big: '−' + R.inactivityPenalty(st.missedDays + 1), cls: 'warn', sub: `${Math.ceil(left * R.MIN_WALK_MIN)} more min walking or ${(left * R.MIN_CYCLE_KM).toFixed(1)} km cycling today avoids it` };
     }
     const [aV, aU] = x.zone ? areaParts(x.zone.areaM2) : ['0', 'm²'];
-    const why = { small: `Your route enclosed less than ${fmt(R.MIN_ZONE_M2)} m² (an out-and-back trip encloses almost nothing).`, blocked: 'Everything it enclosed belongs to rival zones that still have HP. Break them first.', flagged: 'Too much of the trip was flagged by anti-cheat.' }[x.plan.reason] || '';
+    const why = { small: `Your route enclosed less than ${fmt(R.MIN_ZONE_M2)} m² (an out-and-back trip encloses almost nothing).`, flagged: 'Too much of the trip was flagged by anti-cheat.' }[x.plan.reason] || '';
     const row = (label, v) => v ? `<li><span>${label}</span><b>+${fmt(v)}</b></li>` : '';
     el.innerHTML = `
       <div class="screen-inner">
@@ -827,11 +839,11 @@
           <li class="total"><span>Total</span><b>+${fmt(x.points)}</b></li>
         </ul>
 
-        ${(x.broken.length || x.healed || x.plan.protectedNames.length || x.plan.dead.length) ? `<h2>Territory</h2><ul class="events">
+        ${(x.broken.length || x.healed || x.plan.taken.length || x.plan.dead.length) ? `<h2>Territory</h2><ul class="events">
           ${x.broken.map((n) => `<li>💥 Broke <b>${esc(n)}</b></li>`).join('')}
           ${x.zone && x.plan.dead.length ? `<li>⏳ Took over the ground of ${x.plan.dead.map((z) => `<b>${esc(z.name)}</b>`).join(', ')} (decayed)</li>` : ''}
           ${x.healed ? `<li>🛡 Healed ${x.healedNames.map(esc).join(', ')} by <b>${fmt(x.healed)} HP</b></li>` : ''}
-          ${x.plan.protectedNames.length ? `<li>🛡 Cut around ${[...new Set(x.plan.protectedNames)].map((n) => `<b>${esc(n)}</b>`).join(', ')}: rival zones with HP can’t be claimed</li>` : ''}
+          ${x.zone ? x.plan.taken.map((t) => `<li>🏴 Took <b>${areaParts(t.takenM2).join(' ')}</b> of ${esc(t.zone.ownerName)}’s <b>${esc(t.zone.name)}</b>${t.rest ? '' : ' (the whole zone)'}</li>`).join('') : ''}
         </ul>` : ''}
 
         <h2>Anti-cheat</h2>
@@ -881,7 +893,7 @@
       <span class="hpbar"><i style="width:${pct}%;--hp:${hpColor(pct)}"></i></span>
       <p class="small"><b>${fmt(hpOf(z))} / ${fmt(z.maxHp)} HP</b>${dec ? ' · <span class="tag-decay">⏳ decaying</span>' : ''}</p>
       <p class="small muted">${mine ? (pct < 100 ? 'Damaged: walk or ride through it to heal it (×1.25 defend bonus).' : 'Full health. Walking or riding through it counts as patrolling.')
-        : `Walk or ride through it to deal damage${dec ? ' (decaying zones take ×1.25)' : ''}. At 0 HP it breaks and the ground is free to claim.`}</p>
+        : `Walk or ride through it to deal damage${dec ? ' (decaying zones take ×1.25)' : ''}. At 0 HP it breaks. Or ride a loop around it: the newest claim wins, so the part inside your loop becomes yours.`}</p>
       ${mine ? '<button class="btn" id="zc-rename">Rename</button>' : ''}`;
     el.hidden = false;
     $('#zc-close').onclick = hideZoneCard;

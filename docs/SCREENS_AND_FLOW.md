@@ -44,11 +44,11 @@ flowchart LR
 | 7 | **Start sheet** | Set up a trip | How claiming works, **GPS accuracy** status, mode **Auto / Walk / Cycle**, friends nearby (combo), **Start trip**. On localhost: *Test: draw a route and simulate it* |
 | 8 | **Recording HUD** | Live feedback while moving | Big damage counter; distance, time, speed and **zone-if-you-end-now** area; context badge (*Attacking X* / *Defending Y* / *Free ground*); chips for mode, intensity ×, GPS ±m, streak ×, **COMBO ×**. On the map: trail in your colour, 🏁 start, dotted closing line back to the start, light preview fill, damage numbers popping. Anti-cheat banner, *ZONE BROKEN* banner, *back at your start* hint; pause, follow-me, **End trip** |
 | 9 | **End-trip sheet** | Confirm the claim | Explains the straight closing line and the area you'll get (or why there's no zone); *Keep going* / *End & claim* |
-| 10 | **Trip summary** | Payoff | 4 hero tiles: **Damage dealt · Zone (area, HP) · Points earned · Penalty avoided**. Points breakdown (base, streak, combo, defend, new ground, zones broken), territory events (broken, healed, cut around rivals), anti-cheat report, badges unlocked |
+| 10 | **Trip summary** | Payoff | 4 hero tiles: **Damage dealt · Zone (area, HP) · Points earned · Penalty avoided**. Points breakdown (base, streak, combo, defend, new ground, zones broken), territory events (broken, healed, ground taken from other players), anti-cheat report, badges unlocked |
 | 11 | **Leaderboards** | Social comparison | Tabs: Friends · Weekly damage · Territory · Everyone (top 50). Your row highlighted |
 | 12 | **Friends** | Multiplayer | Your **friend code**, copy and *share invite link*; add by code; friends list (live "on a ride now", territory, points, show on map, remove); how playing together works |
 | 13 | **Profile** | Long-term progress | Account card (Google, or guest with *Link Google account*). Total points, damage dealt, **points lost to inactivity**, streak / best, territory, rest tokens; **Today** card with *Use a rest token*; badges; recent trips. Settings: name, colour, map type, sunlight mode, notifications, sign out |
-| 14 | **Notifications** | Re-engagement | *Your zone was hit / broken*, *zone lost to decay*, *friend added you*, *streak reminder*, *missed-day penalty*, *badge unlocked* |
+| 14 | **Notifications** | Re-engagement | *Your zone was hit / broken / taken over*, *zone lost to decay*, *friend added you*, *streak reminder*, *missed-day penalty*, *badge unlocked* |
 
 ---
 

@@ -51,11 +51,21 @@ assert.ok(f8 && Math.abs(T.area(f8) - 5000) < 300, 'figure-eight lobes: ' + (f8 
 // Out-and-back along one road encloses nothing.
 assert.strictEqual(W.planClaim([], [ll(0, 0), ll(300, 2), ll(0, 3)], 'me', today).reason, 'small');
 
-// Claim over a rival zone with HP: cut around it.
-const rival = zoneFrom(rect(40, -50, 140, 50), 'vex', 'Vex Yards');
+// Newest claim wins: a loop over part of a rival zone takes that part; theirs shrinks.
+const rival = zoneFrom(rect(100, -50, 300, 50), 'vex', 'Vex Yards'); // 20,000 m², half inside the loop below
 const plan = W.planClaim([rival], rect(0, -100, 200, 100), 'me', today);
-console.log(`cut-around  claimed ${plan.areaM2.toFixed(0)} m² of 40000 (rival holds 10000)`);
-assert.ok(plan.shape && Math.abs(plan.areaM2 - 30000) < 600 && plan.protectedNames[0] === 'Vex Yards', 'rival protected');
+const t0 = plan.taken[0];
+console.log(`takeover  claimed ${plan.areaM2.toFixed(0)} m² · took ${t0.takenM2.toFixed(0)} m² of Vex Yards · Vex keeps ${T.area(t0.rest).toFixed(0)} m²`);
+assert.ok(Math.abs(plan.areaM2 - 40000) < 600, 'new zone is the whole loop');
+assert.ok(Math.abs(t0.takenM2 - 10000) < 300 && Math.abs(T.area(t0.rest) - 10000) < 300, 'rival shrinks to what is left');
+const sp = W.shrinkPatch(rival, t0.rest);
+assert.ok(sp.areaM2 < rival.areaM2 && sp.maxHp < rival.maxHp && sp.hp <= rival.hp, 'shrunk zone loses HP with area');
+// A loop that covers a rival zone completely removes it.
+const swallowed = W.planClaim([zoneFrom(rect(40, -40, 120, 40), 'vex', 'Small')], rect(0, -100, 200, 100), 'me', today);
+assert.ok(swallowed.taken[0].rest === null, 'fully covered zone is taken over');
+// Same loop ridden twice with GPS wobble: the thin leftover strip is dropped, not kept as a sliver.
+const wobble = W.planClaim([zoneFrom(rect(0, -100, 200, 100), 'vex', 'Same')], rect(-3, -103, 203, 97), 'me', today);
+assert.ok(wobble.taken[0].rest === null, 'GPS-wobble slivers are dropped');
 
 // A rival zone broken by decay is free ground.
 const stale = { ...rival, ownerActiveDay: today - 40 };
@@ -70,7 +80,7 @@ assert.ok(plan3.merged.length === 1 && plan3.shape.geometry.type === 'Polygon', 
 assert.ok(Math.abs(plan3.newAreaM2 - 35000) < 600, 'new area excludes what you already owned');
 
 // Point-in-zone
-assert.strictEqual(W.zoneAt([rival], ...ll(90, 0)).name, 'Vex Yards');
+assert.strictEqual(W.zoneAt([rival], ...ll(150, 0)).name, 'Vex Yards');
 assert.strictEqual(W.zoneAt([rival], ...ll(0, 0)), null);
 
 // ---- Recorder with noisy live GPS on a 4-minute ride around a 150 m-radius loop

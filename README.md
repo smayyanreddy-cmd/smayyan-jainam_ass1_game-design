@@ -40,7 +40,7 @@ Needs Node; there's nothing to install. Open it in any modern browser (Chrome, E
 
 1. **GO → Start trip.** Pick Auto, Walk or Cycle. The sheet shows your GPS accuracy.
 2. Walk or ride. Your trail is drawn in your colour. A dotted line runs from you back to your start 🏁, and a light fill shows the zone you'd get if you ended now.
-3. **End trip → End & claim.** The shape is saved as your zone. Rival zones with HP are cut out of it, and your own zones it touches merge into it.
+3. **End trip → End & claim.** The shape is saved as your zone. The newest claim wins: any part of another player's zone inside it becomes yours and their zone shrinks. Your own zones it touches merge into it.
 
 GPS handling: fixes worse than ±30 m are dropped. A Kalman filter smooths jitter, standing still doesn't add distance, and the screen stays awake while recording. Keep the app open in the foreground: browsers pause GPS for background tabs.
 

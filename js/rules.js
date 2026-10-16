@@ -38,7 +38,8 @@
     ZONE_HP_BASE: 40,
     ZONE_HP_PER_1000M2: 1.5,
     MIN_ZONE_M2: 500,              // smaller claims (e.g. an out-and-back ride) don't make a zone
-    MIN_PART_M2: 50,               // slivers left after cutting around rival zones are dropped
+    MIN_PART_M2: 50,               // tiny leftover pieces of a zone are dropped...
+    SLIVER_M: 4,                   // ...and so are strips narrower than ~8 m (GPS wobble along a shared edge)
     MAX_FLAGGED_SHARE: 0.2,        // more than 20 % of the trip flagged by anti-cheat -> no zone
     DECAY_START_DAY: 2,            // owner inactive this many days -> zone starts decaying
     DECAY_PCT: 0.10,               // 10% of max HP per day
