@@ -4,13 +4,12 @@ window.PEDALPACE_CONFIG = {
   // Paste the object Firebase shows you here. Leave it as null to play offline:
   // single player, saved on this device only, no friends.
   // A Firebase web config is not a secret; the security rules in firestore.rules protect the data.
-  firebase: null,
-  // firebase: {
-  //   apiKey: '...',
-  //   authDomain: 'your-project.firebaseapp.com',
-  //   projectId: 'your-project',
-  //   storageBucket: 'your-project.appspot.com',
-  //   messagingSenderId: '...',
-  //   appId: '...',
-  // },
+  firebase: {
+    apiKey: 'AIzaSyDHOTiFSCBkraXsPoFMPWAl2e8i-nBdLZs',
+    authDomain: 'pedalpace.firebaseapp.com',
+    projectId: 'pedalpace',
+    storageBucket: 'pedalpace.firebasestorage.app',
+    messagingSenderId: '872976391741',
+    appId: '1:872976391741:web:b04f16fa8f9880badfd454',
+  },
 };
